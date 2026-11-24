@@ -18,7 +18,7 @@ info = "Info & tautan"
 help = "Daftar perintah"
 diagnose = "Diagnostik sistem"
 upgrade = "Periksa pembaruan"
-clis = "Versi CLI provider"
+cli = "Versi CLI provider"
 restart = "Restart bot"
 
 [multiagent]

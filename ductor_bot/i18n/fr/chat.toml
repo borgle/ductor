@@ -257,7 +257,7 @@ switched_while_busy = "**Modèle changé.** Le processus en cours continue — l
 
 # -- Sélecteur cron ------------------------------------------------------------
 
-[clis]
+[cli]
 header = "**Versions des CLI de fournisseurs**"
 line_not_installed = "{label} : non installé"
 line_installable = "{label} : non installé (touche Installer)"
@@ -278,6 +278,7 @@ installed = "{label} {version} installé."
 upgraded = "{label} mis à jour vers {version}."
 unknown_action = "Action inconnue."
 
+usage = "Utilisation : `/cli [list|install|upgrade|refresh] [provider]`"
 [cron]
 header = "**Tâches planifiées**"
 empty = "Aucun cron job configuré."

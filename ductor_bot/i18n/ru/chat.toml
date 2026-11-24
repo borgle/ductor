@@ -257,7 +257,7 @@ switched_while_busy = "**Модель переключена.** Текущий �
 
 # -- Cron-задачи ---------------------------------------------------------------
 
-[clis]
+[cli]
 header = "**Версии CLI провайдеров**"
 line_not_installed = "{label}: не установлен"
 line_installable = "{label}: не установлен (нажми «Установить»)"
@@ -278,6 +278,7 @@ installed = "{label} {version} установлен."
 upgraded = "{label} обновлён до {version}."
 unknown_action = "Неизвестное действие."
 
+usage = "Использование: `/cli [list|install|upgrade|refresh] [provider]`"
 [cron]
 header = "**Запланированные задачи**"
 empty = "Cron-задачи не настроены."

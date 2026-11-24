@@ -18,7 +18,7 @@ info = "Docs, links & info"
 help = "Alle commando's"
 diagnose = "Systeemdiagnose"
 upgrade = "Controleer op updates"
-clis = "Provider-CLI-versies"
+cli = "Provider-CLI-versies"
 restart = "Bot herstarten"
 
 [multiagent]

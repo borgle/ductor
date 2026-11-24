@@ -257,7 +257,7 @@ switched_while_busy = "**Model gewisseld.** Huidig proces draait nog — nieuw m
 
 # -- Cronselector ------------------------------------------------------------------
 
-[clis]
+[cli]
 header = "**Provider-CLI-versies**"
 line_not_installed = "{label}: niet geïnstalleerd"
 line_installable = "{label}: niet geïnstalleerd (tik op Installeren)"
@@ -278,6 +278,7 @@ installed = "{label} {version} geïnstalleerd."
 upgraded = "{label} bijgewerkt naar {version}."
 unknown_action = "Onbekende actie."
 
+usage = "Gebruik: `/cli [list|install|upgrade|refresh] [provider]`"
 [cron]
 header = "**Geplande taken**"
 empty = "Geen cronjobs geconfigureerd."

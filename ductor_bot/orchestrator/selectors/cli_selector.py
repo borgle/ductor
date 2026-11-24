@@ -34,36 +34,36 @@ def is_cli_selector_callback(data: str) -> bool:
 def _button_label(status: CLIStatus) -> str:
     if not status.installed:
         if status.upgrade_supported:
-            return t("clis.btn_install", label=status.label)
-        return t("clis.btn_not_installed", label=status.label)
+            return t("cli.btn_install", label=status.label)
+        return t("cli.btn_not_installed", label=status.label)
     if status.latest and status.update_available:
         return t(
-            "clis.btn_update",
+            "cli.btn_update",
             label=status.label,
             current=status.version_display,
             latest=status.latest_display,
         )
-    return t("clis.btn_current", label=status.label, version=status.version_display)
+    return t("cli.btn_current", label=status.label, version=status.version_display)
 
 
 def _status_line(status: CLIStatus) -> str:
     if not status.installed:
-        key = "clis.line_installable" if status.upgrade_supported else "clis.line_not_installed"
+        key = "cli.line_installable" if status.upgrade_supported else "cli.line_not_installed"
         return t(key, label=status.label)
     if status.latest and status.update_available:
         return t(
-            "clis.line_update",
+            "cli.line_update",
             label=status.label,
             current=status.version_display,
             latest=status.latest_display,
         )
     if status.latest:
         return t(
-            "clis.line_current",
+            "cli.line_current",
             label=status.label,
             version=status.version_display,
         )
-    return t("clis.line_unknown_latest", label=status.label, version=status.version_display)
+    return t("cli.line_unknown_latest", label=status.label, version=status.version_display)
 
 
 async def cli_selector_start(
@@ -76,32 +76,32 @@ async def cli_selector_start(
     del orch, key
     statuses = await get_all_cli_statuses(include_latest=True)
 
-    lines = [t("clis.header"), ""]
+    lines = [t("cli.header"), ""]
     if note:
         lines += [note, ""]
     lines += [_status_line(status) for status in statuses]
-    lines += ["", t("clis.tap_hint")]
+    lines += ["", t("cli.tap_hint")]
 
     rows = [
         [Button(text=_button_label(status), callback_data=f"cli:u:{status.provider}")]
         for status in statuses
     ]
-    rows.append([Button(text=t("clis.btn_refresh"), callback_data="cli:r")])
+    rows.append([Button(text=t("cli.btn_refresh"), callback_data="cli:r")])
     return SelectorResponse(text="\n".join(lines), buttons=ButtonGrid(rows=rows))
 
 
 async def _upgrade_one(provider: str) -> str:
     status = await get_cli_status(provider, include_latest=True)
     if status is None:
-        return t("clis.unknown_provider", provider=provider)
+        return t("cli.unknown_provider", provider=provider)
     if not status.upgrade_supported:
         spec = cli_spec(provider)
         hint = spec.manual_hint if spec and spec.manual_hint else ""
-        return t("clis.manual", label=status.label, hint=hint).strip()
+        return t("cli.manual", label=status.label, hint=hint).strip()
 
     installing = not status.installed
     if not installing and status.latest and not status.update_available:
-        return t("clis.no_update", label=status.label, version=status.version_display)
+        return t("cli.no_update", label=status.label, version=status.version_display)
 
     result = await upgrade_cli(provider)
     if not result.ok:
@@ -109,7 +109,7 @@ async def _upgrade_one(provider: str) -> str:
 
     refreshed = await get_cli_status(provider, include_latest=True)
     if refreshed and refreshed.version:
-        key = "clis.installed" if installing else "clis.upgraded"
+        key = "cli.installed" if installing else "cli.upgraded"
         return t(
             key,
             label=refreshed.label,
@@ -137,7 +137,7 @@ async def handle_cli_callback(
         return await cli_selector_start(orch, key, note=note)
 
     logger.warning("Unknown CLI selector callback: %s", data)
-    return SelectorResponse(text=t("clis.unknown_action"))
+    return SelectorResponse(text=t("cli.unknown_action"))
 
 
 __all__ = [

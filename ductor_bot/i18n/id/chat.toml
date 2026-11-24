@@ -256,7 +256,7 @@ switched_while_busy = "**Model beralih.** Proses saat ini masih berjalan — mod
 
 # -- Cron selector -------------------------------------------------------------
 
-[clis]
+[cli]
 header = "**Versi CLI Provider**"
 line_not_installed = "{label}: belum terpasang"
 line_installable = "{label}: belum terpasang (ketuk Instal)"
@@ -277,6 +277,7 @@ installed = "{label} {version} terpasang."
 upgraded = "{label} diperbarui ke {version}."
 unknown_action = "Tindakan tidak dikenal."
 
+usage = "Penggunaan: `/cli [list|install|upgrade|refresh] [provider]`"
 [cron]
 header = "**Tugas Terjadwal**"
 empty = "Tidak ada cron job yang dikonfigurasi."

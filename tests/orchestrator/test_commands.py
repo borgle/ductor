@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 from ductor_bot.cli.auth import AuthResult, AuthStatus
 from ductor_bot.orchestrator.commands import (
-    cmd_clis,
+    cmd_cli,
     cmd_cron,
     cmd_diagnose,
     cmd_effort,
@@ -19,7 +19,7 @@ from ductor_bot.orchestrator.core import Orchestrator
 from ductor_bot.session.key import SessionKey
 
 
-async def test_cmd_clis_returns_selector(orch: Orchestrator) -> None:
+async def test_cmd_cli_returns_selector(orch: Orchestrator) -> None:
     from ductor_bot.orchestrator.selectors.models import Button, ButtonGrid, SelectorResponse
 
     resp = SelectorResponse(
@@ -30,12 +30,12 @@ async def test_cmd_clis_returns_selector(orch: Orchestrator) -> None:
         "ductor_bot.orchestrator.commands.cli_selector_start",
         AsyncMock(return_value=resp),
     ):
-        result = await cmd_clis(orch, SessionKey(chat_id=1), "/clis")
+        result = await cmd_cli(orch, SessionKey(chat_id=1), "/cli")
     assert result.buttons is not None
     assert "CLI" in result.text
 
 
-async def test_cmd_clis_upgrade_routes_to_callback(orch: Orchestrator) -> None:
+async def test_cmd_cli_upgrade_routes_to_callback(orch: Orchestrator) -> None:
     from ductor_bot.orchestrator.selectors.models import SelectorResponse
 
     resp = SelectorResponse(text="Claude upgraded.")
@@ -43,9 +43,48 @@ async def test_cmd_clis_upgrade_routes_to_callback(orch: Orchestrator) -> None:
         "ductor_bot.orchestrator.commands.handle_cli_callback",
         AsyncMock(return_value=resp),
     ) as handler:
-        result = await cmd_clis(orch, SessionKey(chat_id=1), "/clis upgrade claude")
+        result = await cmd_cli(orch, SessionKey(chat_id=1), "/cli upgrade claude")
     handler.assert_awaited_once()
     assert "upgraded" in result.text
+
+
+async def test_cmd_cli_list_subcommand(orch: Orchestrator) -> None:
+    from ductor_bot.orchestrator.selectors.models import Button, ButtonGrid, SelectorResponse
+
+    resp = SelectorResponse(
+        text="**CLI Versions**",
+        buttons=ButtonGrid(rows=[[Button(text="Claude", callback_data="cli:u:claude")]]),
+    )
+    with patch(
+        "ductor_bot.orchestrator.commands.cli_selector_start",
+        AsyncMock(return_value=resp),
+    ):
+        result = await cmd_cli(orch, SessionKey(chat_id=1), "/cli list")
+    assert result.buttons is not None
+
+
+async def test_cmd_cli_install_routes_to_callback(orch: Orchestrator) -> None:
+    from ductor_bot.orchestrator.selectors.models import SelectorResponse
+
+    resp = SelectorResponse(text="Gemini installed.")
+    with patch(
+        "ductor_bot.orchestrator.commands.handle_cli_callback",
+        AsyncMock(return_value=resp),
+    ) as handler:
+        result = await cmd_cli(orch, SessionKey(chat_id=1), "/cli install gemini")
+    handler.assert_awaited_once()
+    assert "installed" in result.text
+
+
+async def test_cmd_cli_missing_provider_shows_usage(orch: Orchestrator) -> None:
+    result = await cmd_cli(orch, SessionKey(chat_id=1), "/cli install")
+    assert "Usage:" in result.text
+    assert result.buttons is None
+
+
+async def test_cmd_cli_unknown_subcommand_shows_usage(orch: Orchestrator) -> None:
+    result = await cmd_cli(orch, SessionKey(chat_id=1), "/cli nope")
+    assert "Usage:" in result.text
 
 
 # -- cmd_model (wizard + direct switch) --

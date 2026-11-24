@@ -257,7 +257,7 @@ switched_while_busy = "**Modell gewechselt.** Aktueller Prozess läuft noch — 
 
 # -- Cron-Selektor -------------------------------------------------------------
 
-[clis]
+[cli]
 header = "**Provider-CLI-Versionen**"
 line_not_installed = "{label}: nicht installiert"
 line_installable = "{label}: nicht installiert (auf Installieren tippen)"
@@ -278,6 +278,7 @@ installed = "{label} {version} installiert."
 upgraded = "{label} auf {version} aktualisiert."
 unknown_action = "Unbekannte Aktion."
 
+usage = "Nutzung: `/cli [list|install|upgrade|refresh] [provider]`"
 [cron]
 header = "**Geplante Aufgaben**"
 empty = "Keine Cron-Jobs konfiguriert."

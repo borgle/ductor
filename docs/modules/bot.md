@@ -33,7 +33,7 @@ Immediate middleware-handled command path (pre-lock, no normal dispatch):
 
 Orchestrator-routed commands:
 
-- `/status`, `/memory`, `/model`, `/cron`, `/diagnose`, `/clis`, `/upgrade`, `/sessions`, `/tasks`, `/reset`
+- `/status`, `/memory`, `/model`, `/cron`, `/diagnose`, `/cli`, `/upgrade`, `/sessions`, `/tasks`, `/reset`
 
 ## Middleware behavior
 

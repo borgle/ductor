@@ -141,7 +141,7 @@ def _build_help_text() -> str:
         f"{t('help.cat_multiagent')}\n{_help_line('agent_commands')}",
         f"{t('help.cat_browse')}\n{_help_line('where')}\n{_help_line('leave')}\n"
         f"{_help_line('showfiles')}\n{_help_line('info')}\n{_help_line('help')}",
-        f"{t('help.cat_maintenance')}\n{_help_line('diagnose')}\n{_help_line('clis')}\n{_help_line('upgrade')}\n{_help_line('restart')}",
+        f"{t('help.cat_maintenance')}\n{_help_line('diagnose')}\n{_help_line('cli')}\n{_help_line('upgrade')}\n{_help_line('restart')}",
         SEP,
         t("help.footer"),
     )

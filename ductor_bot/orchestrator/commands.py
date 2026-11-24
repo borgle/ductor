@@ -218,22 +218,34 @@ async def cmd_upgrade(_orch: Orchestrator, _key: SessionKey, _text: str) -> Orch
     )
 
 
-async def cmd_clis(orch: Orchestrator, key: SessionKey, text: str) -> OrchestratorResult:
-    """Handle ``/clis [install|upgrade <provider>]`` for provider CLI versions."""
+async def cmd_cli(orch: Orchestrator, key: SessionKey, text: str) -> OrchestratorResult:
+    """Handle ``/cli [list|install|upgrade] [provider]`` for provider CLI versions."""
     logger.info("Provider CLI versions requested")
     parts = text.split(None, 2)
-    if len(parts) >= 3 and parts[1].casefold() in {"install", "upgrade"}:
-        provider = parts[2].strip().casefold()
-        resp = await handle_cli_callback(orch, key, f"cli:u:{provider}")
-    else:
+    action = parts[1].casefold() if len(parts) > 1 else "list"
+
+    if len(parts) < 2 or action in {"list", "ls"}:
         resp = await cli_selector_start(orch, key)
-    return OrchestratorResult(text=resp.text, buttons=resp.buttons)
+        return OrchestratorResult(text=resp.text, buttons=resp.buttons)
+
+    if action in {"install", "upgrade"}:
+        if len(parts) < 3 or not parts[2].strip():
+            return OrchestratorResult(text=t("cli.usage"))
+        provider = parts[2].strip().split()[0].casefold()
+        resp = await handle_cli_callback(orch, key, f"cli:u:{provider}")
+        return OrchestratorResult(text=resp.text, buttons=resp.buttons)
+
+    if action in {"refresh", "r"}:
+        resp = await handle_cli_callback(orch, key, "cli:r")
+        return OrchestratorResult(text=resp.text, buttons=resp.buttons)
+
+    return OrchestratorResult(text=t("cli.usage"))
 
 
 async def _build_cli_versions_block() -> str:
     """Build installed provider-CLI versions for /diagnose (no network)."""
     statuses = await get_all_cli_statuses(include_latest=False)
-    return "\n" + t("clis.header") + "\n" + statuses_for_diagnose(statuses)
+    return "\n" + t("cli.header") + "\n" + statuses_for_diagnose(statuses)
 
 
 def _build_codex_cache_block(orch: Orchestrator) -> str:

@@ -72,7 +72,7 @@ Common path:
 
 Registered command handlers:
 
-- `/new`, `/reset`, `/status`, `/model`, `/memory`, `/cron`, `/diagnose`, `/clis`, `/upgrade`, `/sessions`, `/tasks`
+- `/new`, `/reset`, `/status`, `/model`, `/memory`, `/cron`, `/diagnose`, `/cli`, `/upgrade`, `/sessions`, `/tasks`
 
 `/new` resets only the currently configured provider bucket for the active `SessionKey`.
 Other provider buckets for the same chat/topic remain intact.

@@ -191,9 +191,14 @@ Recovery triggers handled in orchestrator flows:
 
 ## Provider CLI versions (`cli_versions.py`)
 
-`/clis` (and the `cli:*` callback namespace) shows installed versions for
-`claude`, `codex`, `gemini`, `agy`, `grok`, and `pi`. Use `/clis install <provider>`
-or tap an `Install …` button to install a missing npm-based CLI.
+`/cli` (and the `cli:*` callback namespace) shows installed versions for
+`claude`, `codex`, `gemini`, `agy`, `grok`, and `pi`.
+
+- `/cli` or `/cli list` — version overview
+- `/cli install <provider>` — install a missing npm-based CLI
+- `/cli upgrade <provider>` — install or upgrade
+- `/cli refresh` — re-check versions without upgrading
+- buttons in the picker do the same actions
 
 - installed versions: `<cli> --version`
 - latest versions: npm registry (`@anthropic-ai/claude-code`, `@openai/codex`,
