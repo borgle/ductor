@@ -34,6 +34,7 @@ class CLISpec:
     npm_package: str | None = None
     upgrade_kind: str = "npm"  # "npm", "self", or "manual"
     manual_hint: str = ""
+    npm_install_extra: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,20 +93,21 @@ _SPECS: dict[str, CLISpec] = {
         binary="pi",
         npm_package="@earendil-works/pi-coding-agent",
         upgrade_kind="self",
+        npm_install_extra=("--ignore-scripts",),
     ),
     "grok": CLISpec(
         provider="grok",
         label="Grok Build",
         binary="grok",
         upgrade_kind="manual",
-        manual_hint="Reinstall with the xAI Grok CLI installer.",
+        manual_hint="Use the official xAI Grok CLI installer.",
     ),
     "antigravity": CLISpec(
         provider="antigravity",
         label="Antigravity",
         binary="agy",
         upgrade_kind="manual",
-        manual_hint="Update Antigravity with its own installer.",
+        manual_hint="Use the official Antigravity installer.",
     ),
 }
 
@@ -222,23 +224,33 @@ async def get_all_cli_statuses(*, include_latest: bool = True) -> list[CLIStatus
     return [status for status in results if status is not None]
 
 
+def _npm_install_command(spec: CLISpec) -> tuple[list[str] | None, str]:
+    npm = shutil.which("npm")
+    if not npm:
+        return None, "npm is not available on PATH."
+    if not spec.npm_package:
+        return None, f"No npm package configured for {spec.label}."
+    cmd = [npm, "install", "-g", *spec.npm_install_extra, f"{spec.npm_package}@latest"]
+    return cmd, ""
+
+
 def _build_upgrade_command(spec: CLISpec) -> tuple[list[str] | None, str]:
-    """Return ``(argv, error)`` for a provider CLI upgrade."""
+    """Return ``(argv, error)`` to install or upgrade a provider CLI."""
     if spec.upgrade_kind == "self":
         binary = shutil.which(spec.binary)
-        if not binary:
-            return None, f"{spec.binary} is not installed."
-        return [binary, "update"], ""
+        if binary:
+            return [binary, "update"], ""
+        # Not installed yet: bootstrap through npm when the package is known.
+        if spec.npm_package:
+            return _npm_install_command(spec)
+        return None, f"{spec.binary} is not installed."
 
     if spec.upgrade_kind == "npm":
-        npm = shutil.which("npm")
-        if not npm:
-            return None, "npm is not available on PATH."
-        if not spec.npm_package:
-            return None, f"No npm package configured for {spec.label}."
-        return [npm, "install", "-g", f"{spec.npm_package}@latest"], ""
+        return _npm_install_command(spec)
 
-    return None, spec.manual_hint or f"Automatic upgrade is not supported for {spec.label}."
+    return None, spec.manual_hint or (
+        f"Automatic install/upgrade is not supported for {spec.label}."
+    )
 
 
 async def upgrade_cli(provider: str) -> CLIUpgradeResult:
@@ -299,12 +311,14 @@ def _join_output(output: str, limit: int = 1200) -> str:
     return f"...{text[-limit:]}"
 
 
-def upgrade_result_summary(result: CLIUpgradeResult) -> str:
-    """Build a short user-facing upgrade result string."""
+def upgrade_result_summary(result: CLIUpgradeResult, *, action: str = "upgrade") -> str:
+    """Build a short user-facing install/upgrade result string."""
+    spec = _SPECS.get(result.provider)
+    label = spec.label if spec else result.provider
     if result.ok:
-        return f"{result.provider}: upgrade command completed."
+        return f"{label}: {action} command completed."
     output = _join_output(result.output)
-    return f"{result.provider}: upgrade failed." + (f"\n{output}" if output else "")
+    return f"{label}: {action} failed." + (f"\n{output}" if output else "")
 
 
 def statuses_for_diagnose(statuses: Sequence[CLIStatus]) -> str:

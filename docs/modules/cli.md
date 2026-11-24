@@ -192,13 +192,14 @@ Recovery triggers handled in orchestrator flows:
 ## Provider CLI versions (`cli_versions.py`)
 
 `/clis` (and the `cli:*` callback namespace) shows installed versions for
-`claude`, `codex`, `gemini`, `agy`, `grok`, and `pi`.
+`claude`, `codex`, `gemini`, `agy`, `grok`, and `pi`. Use `/clis install <provider>`
+or tap an `Install …` button to install a missing npm-based CLI.
 
 - installed versions: `<cli> --version`
 - latest versions: npm registry (`@anthropic-ai/claude-code`, `@openai/codex`,
   `@google/gemini-cli`, `@earendil-works/pi-coding-agent`)
-- upgrades: `npm install -g <package>@latest` for Claude/Codex/Gemini/Pi;
-  `pi update` for Pi; Grok/Antigravity are reported as manual
+- install/upgrade: `npm install -g <package>@latest` for Claude/Codex/Gemini/Pi;
+  `pi update` when Pi is already installed; Grok/Antigravity are reported as manual
 - `/diagnose` includes installed versions without network calls
 
 ## Auth detection (`auth.py`)

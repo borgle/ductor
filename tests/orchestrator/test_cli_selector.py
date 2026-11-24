@@ -101,6 +101,33 @@ async def test_upgrade_callback_runs_upgrade_and_refreshes() -> None:
     assert "upgraded" in resp.text.lower()
 
 
+async def test_install_callback_installs_missing_cli() -> None:
+    missing = _status("gemini", installed=False, version=None, latest="0.71.1")
+    installed = _status("gemini", version="0.71.1", latest="0.71.1")
+    with (
+        patch(
+            "ductor_bot.orchestrator.selectors.cli_selector.get_cli_status",
+            AsyncMock(side_effect=[missing, installed]),
+        ),
+        patch(
+            "ductor_bot.orchestrator.selectors.cli_selector.upgrade_cli",
+            AsyncMock(return_value=CLIUpgradeResult("gemini", True, "ok")),
+        ) as install_mock,
+        patch(
+            "ductor_bot.orchestrator.selectors.cli_selector.get_all_cli_statuses",
+            AsyncMock(return_value=[installed]),
+        ),
+    ):
+        resp = await handle_cli_callback(
+            None,  # type: ignore[arg-type]
+            SessionKey(chat_id=1),
+            "cli:u:gemini",
+        )
+
+    install_mock.assert_awaited_once_with("gemini")
+    assert "installed" in resp.text.lower()
+
+
 async def test_upgrade_callback_skips_when_current() -> None:
     current = _status("claude", version="2.2.0", latest="2.2.0")
     with (

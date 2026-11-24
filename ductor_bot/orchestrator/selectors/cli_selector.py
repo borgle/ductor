@@ -33,6 +33,8 @@ def is_cli_selector_callback(data: str) -> bool:
 
 def _button_label(status: CLIStatus) -> str:
     if not status.installed:
+        if status.upgrade_supported:
+            return t("clis.btn_install", label=status.label)
         return t("clis.btn_not_installed", label=status.label)
     if status.latest and status.update_available:
         return t(
@@ -46,7 +48,8 @@ def _button_label(status: CLIStatus) -> str:
 
 def _status_line(status: CLIStatus) -> str:
     if not status.installed:
-        return t("clis.line_not_installed", label=status.label)
+        key = "clis.line_installable" if status.upgrade_supported else "clis.line_not_installed"
+        return t(key, label=status.label)
     if status.latest and status.update_available:
         return t(
             "clis.line_update",
@@ -87,30 +90,32 @@ async def cli_selector_start(
     return SelectorResponse(text="\n".join(lines), buttons=ButtonGrid(rows=rows))
 
 
-async def _upgrade_one(provider: str) -> str:  # noqa: PLR0911
+async def _upgrade_one(provider: str) -> str:
     status = await get_cli_status(provider, include_latest=True)
     if status is None:
         return t("clis.unknown_provider", provider=provider)
-    if not status.installed:
-        return t("clis.not_installed", label=status.label)
     if not status.upgrade_supported:
         spec = cli_spec(provider)
         hint = spec.manual_hint if spec and spec.manual_hint else ""
         return t("clis.manual", label=status.label, hint=hint).strip()
-    if status.latest and not status.update_available:
+
+    installing = not status.installed
+    if not installing and status.latest and not status.update_available:
         return t("clis.no_update", label=status.label, version=status.version_display)
 
     result = await upgrade_cli(provider)
     if not result.ok:
-        return upgrade_result_summary(result)
+        return upgrade_result_summary(result, action="install" if installing else "upgrade")
+
     refreshed = await get_cli_status(provider, include_latest=True)
     if refreshed and refreshed.version:
+        key = "clis.installed" if installing else "clis.upgraded"
         return t(
-            "clis.upgraded",
+            key,
             label=refreshed.label,
             version=refreshed.version_display,
         )
-    return upgrade_result_summary(result)
+    return upgrade_result_summary(result, action="install" if installing else "upgrade")
 
 
 async def handle_cli_callback(

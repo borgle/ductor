@@ -219,10 +219,10 @@ async def cmd_upgrade(_orch: Orchestrator, _key: SessionKey, _text: str) -> Orch
 
 
 async def cmd_clis(orch: Orchestrator, key: SessionKey, text: str) -> OrchestratorResult:
-    """Handle ``/clis [upgrade <provider>]`` for provider CLI versions."""
+    """Handle ``/clis [install|upgrade <provider>]`` for provider CLI versions."""
     logger.info("Provider CLI versions requested")
     parts = text.split(None, 2)
-    if len(parts) >= 3 and parts[1].casefold() == "upgrade":
+    if len(parts) >= 3 and parts[1].casefold() in {"install", "upgrade"}:
         provider = parts[2].strip().casefold()
         resp = await handle_cli_callback(orch, key, f"cli:u:{provider}")
     else:

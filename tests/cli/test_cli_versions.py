@@ -49,6 +49,24 @@ def test_build_pi_self_upgrade_command(monkeypatch: pytest.MonkeyPatch) -> None:
     assert cmd == ["/usr/bin/pi", "update"]
 
 
+def test_build_pi_install_command_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _which(name: str) -> str | None:
+        return "/usr/bin/npm" if name == "npm" else None
+
+    monkeypatch.setattr(cli_versions.shutil, "which", _which)
+    spec = cli_versions.cli_spec("pi")
+    assert spec is not None
+    cmd, error = _build_upgrade_command(spec)
+    assert error == ""
+    assert cmd == [
+        "/usr/bin/npm",
+        "install",
+        "-g",
+        "--ignore-scripts",
+        "@earendil-works/pi-coding-agent@latest",
+    ]
+
+
 def test_build_manual_upgrade_is_unsupported() -> None:
     spec = cli_versions.cli_spec("grok")
     assert spec is not None
@@ -123,7 +141,7 @@ async def test_upgrade_cli_manual_provider() -> None:
 
 def test_upgrade_result_summary() -> None:
     ok = cli_versions.upgrade_result_summary(CLIUpgradeResult(provider="codex", ok=True, output=""))
-    assert "codex" in ok
+    assert "Codex" in ok
     failed = cli_versions.upgrade_result_summary(
         CLIUpgradeResult(provider="codex", ok=False, output="boom")
     )
