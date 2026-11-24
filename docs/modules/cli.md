@@ -32,6 +32,7 @@ Provider-agnostic CLI execution layer for Claude Code, Codex, Gemini, Antigravit
 - `antigravity_discovery.py`: Antigravity model discovery via `agy models` (parses display names)
 - `process_registry.py`: subprocess tracking/abort/kill
 - `auth.py`: provider auth detection
+- `cli_versions.py`: installed/latest version probes and upgrade commands for underlying provider CLIs
 - `param_resolver.py`: task override resolution for cron/webhook one-shot runs
 - `codex_cache.py`, `codex_cache_observer.py`: Codex model cache + observer
 - `gemini_cache.py`, `gemini_cache_observer.py`: Gemini model cache + observer
@@ -187,6 +188,18 @@ Recovery triggers handled in orchestrator flows:
 - project trust: `--approve` when `permission_mode=bypassPermissions`
 - stream: `message_update.text_delta` → text, `thinking_delta` → thinking, `tool_execution_start` → tool, `compaction_start/end` → status; final `message_end`/`turn_end` supply authoritative text, usage, and cost
 - auth: `~/.pi/agent/auth.json` (or `PI_CODING_AGENT_DIR`) and common Pi provider API-key env vars
+
+## Provider CLI versions (`cli_versions.py`)
+
+`/clis` (and the `cli:*` callback namespace) shows installed versions for
+`claude`, `codex`, `gemini`, `agy`, `grok`, and `pi`.
+
+- installed versions: `<cli> --version`
+- latest versions: npm registry (`@anthropic-ai/claude-code`, `@openai/codex`,
+  `@google/gemini-cli`, `@earendil-works/pi-coding-agent`)
+- upgrades: `npm install -g <package>@latest` for Claude/Codex/Gemini/Pi;
+  `pi update` for Pi; Grok/Antigravity are reported as manual
+- `/diagnose` includes installed versions without network calls
 
 ## Auth detection (`auth.py`)
 

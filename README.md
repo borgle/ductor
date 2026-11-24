@@ -391,7 +391,8 @@ This is **hot-reloadable** — change the language without restarting the bot.
 | `/cron` | Interactive cron management |
 | `/showfiles` | Browse `~/.ductor/` |
 | `/diagnose` | Runtime diagnostics |
-| `/upgrade` | Check/apply updates |
+| `/clis` | Check/upgrade provider CLI versions |
+| `/upgrade` | Check/apply ductor updates |
 | `/agents` | Multi-agent status |
 | `/agent_commands` | Multi-agent command reference |
 | `/where` | Show tracked chats/groups |

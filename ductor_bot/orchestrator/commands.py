@@ -8,9 +8,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ductor_bot.cli.auth import check_all_auth
+from ductor_bot.cli.cli_versions import get_all_cli_statuses, statuses_for_diagnose
 from ductor_bot.i18n import t
 from ductor_bot.infra.version import check_pypi, get_current_version
 from ductor_bot.orchestrator.registry import OrchestratorResult
+from ductor_bot.orchestrator.selectors.cli_selector import (
+    cli_selector_start,
+    handle_cli_callback,
+)
 from ductor_bot.orchestrator.selectors.cron_selector import cron_selector_start
 from ductor_bot.orchestrator.selectors.model_selector import (
     PROVIDERS,
@@ -213,6 +218,24 @@ async def cmd_upgrade(_orch: Orchestrator, _key: SessionKey, _text: str) -> Orch
     )
 
 
+async def cmd_clis(orch: Orchestrator, key: SessionKey, text: str) -> OrchestratorResult:
+    """Handle ``/clis [upgrade <provider>]`` for provider CLI versions."""
+    logger.info("Provider CLI versions requested")
+    parts = text.split(None, 2)
+    if len(parts) >= 3 and parts[1].casefold() == "upgrade":
+        provider = parts[2].strip().casefold()
+        resp = await handle_cli_callback(orch, key, f"cli:u:{provider}")
+    else:
+        resp = await cli_selector_start(orch, key)
+    return OrchestratorResult(text=resp.text, buttons=resp.buttons)
+
+
+async def _build_cli_versions_block() -> str:
+    """Build installed provider-CLI versions for /diagnose (no network)."""
+    statuses = await get_all_cli_statuses(include_latest=False)
+    return "\n" + t("clis.header") + "\n" + statuses_for_diagnose(statuses)
+
+
 def _build_codex_cache_block(orch: Orchestrator) -> str:
     """Build the Codex model cache section for /diagnose."""
     if not orch._observers.codex_cache_obs:
@@ -276,6 +299,7 @@ async def cmd_diagnose(orch: Orchestrator, _key: SessionKey, _text: str) -> Orch
         f"{t('diagnose.effective_line', provider=effective_provider, model=effective_model)}"
     )
 
+    cli_block = await _build_cli_versions_block()
     cache_block = _build_codex_cache_block(orch)
     agent_block = _build_diagnose_health_block(orch)
 
@@ -285,7 +309,16 @@ async def cmd_diagnose(orch: Orchestrator, _key: SessionKey, _text: str) -> Orch
     )
 
     return OrchestratorResult(
-        text=fmt(t("diagnose.header"), SEP, info_block, cache_block, agent_block, SEP, log_block),
+        text=fmt(
+            t("diagnose.header"),
+            SEP,
+            info_block,
+            cli_block,
+            cache_block,
+            agent_block,
+            SEP,
+            log_block,
+        ),
     )
 
 

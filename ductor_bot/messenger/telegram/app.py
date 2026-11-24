@@ -141,7 +141,7 @@ def _build_help_text() -> str:
         f"{t('help.cat_multiagent')}\n{_help_line('agent_commands')}",
         f"{t('help.cat_browse')}\n{_help_line('where')}\n{_help_line('leave')}\n"
         f"{_help_line('showfiles')}\n{_help_line('info')}\n{_help_line('help')}",
-        f"{t('help.cat_maintenance')}\n{_help_line('diagnose')}\n{_help_line('upgrade')}\n{_help_line('restart')}",
+        f"{t('help.cat_maintenance')}\n{_help_line('diagnose')}\n{_help_line('clis')}\n{_help_line('upgrade')}\n{_help_line('restart')}",
         SEP,
         t("help.footer"),
     )
@@ -1226,6 +1226,12 @@ class TelegramBot:
             await self._handle_model_selector(key, message_id, data)
             return True
 
+        from ductor_bot.orchestrator.selectors.cli_selector import is_cli_selector_callback
+
+        if is_cli_selector_callback(data):
+            await self._handle_cli_selector(key, message_id, data)
+            return True
+
         from ductor_bot.orchestrator.selectors.cron_selector import is_cron_selector_callback
 
         if is_cron_selector_callback(data):
@@ -1274,6 +1280,17 @@ class TelegramBot:
 
         async with self._sequential.get_lock(key.lock_key):
             resp = await handle_model_callback(self._orch, key, data)
+        await edit_selector_response(self._bot, key.chat_id, message_id, resp)
+
+    async def _handle_cli_selector(self, key: SessionKey, message_id: int, data: str) -> None:
+        """Handle provider CLI version/upgrade callbacks in-place.
+
+        Unlike the model selector this does not touch session state, so it
+        intentionally does not hold the per-chat lock during a long npm run.
+        """
+        from ductor_bot.orchestrator.selectors.cli_selector import handle_cli_callback
+
+        resp = await handle_cli_callback(self._orch, key, data)
         await edit_selector_response(self._bot, key.chat_id, message_id, resp)
 
     async def _handle_cron_selector(self, chat_id: int, message_id: int, data: str) -> None:

@@ -256,6 +256,24 @@ switched_while_busy = "**Model beralih.** Proses saat ini masih berjalan — mod
 
 # -- Cron selector -------------------------------------------------------------
 
+[clis]
+header = "**Versi CLI Provider**"
+line_not_installed = "{label}: belum terpasang"
+line_update = "{label}: {current} -> {latest} tersedia"
+line_current = "{label}: {version} (terbaru)"
+line_unknown_latest = "{label}: {version}"
+tap_hint = "Ketuk CLI untuk memperbarui. `Refresh` memeriksa ulang."
+btn_not_installed = "{label} — belum terpasang"
+btn_update = "{label} {current} ⬆ {latest}"
+btn_current = "{label} {version}"
+btn_refresh = "Segarkan"
+unknown_provider = "CLI provider tidak dikenal: {provider}"
+not_installed = "{label} belum terpasang."
+manual = "{label}: pembaruan otomatis tidak didukung. {hint}"
+no_update = "{label} sudah memakai {version}."
+upgraded = "{label} diperbarui ke {version}."
+unknown_action = "Tindakan tidak dikenal."
+
 [cron]
 header = "**Tugas Terjadwal**"
 empty = "Tidak ada cron job yang dikonfigurasi."

@@ -29,6 +29,7 @@ from ductor_bot.errors import (
 from ductor_bot.infra.docker import DockerManager
 from ductor_bot.infra.inflight import InflightTracker
 from ductor_bot.orchestrator.commands import (
+    cmd_clis,
     cmd_cron,
     cmd_diagnose,
     cmd_effort,
@@ -470,6 +471,8 @@ class Orchestrator:
         reg.register_async("/cron", cmd_cron)
         reg.register_async("/diagnose", cmd_diagnose)
         reg.register_async("/upgrade", cmd_upgrade)
+        reg.register_async("/clis", cmd_clis)
+        reg.register_async("/clis ", cmd_clis)
         reg.register_async("/sessions", cmd_sessions)
         reg.register_async("/tasks", cmd_tasks)
 

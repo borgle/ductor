@@ -35,6 +35,7 @@ def get_bot_commands() -> list[tuple[str, str]]:
         ("help", t_cmd("bot.help")),
         # Maintenance (rare)
         ("diagnose", t_cmd("bot.diagnose")),
+        ("clis", t_cmd("bot.clis")),
         ("upgrade", t_cmd("bot.upgrade")),
         ("restart", t_cmd("bot.restart")),
     ]

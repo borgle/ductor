@@ -33,7 +33,7 @@ Immediate middleware-handled command path (pre-lock, no normal dispatch):
 
 Orchestrator-routed commands:
 
-- `/status`, `/memory`, `/model`, `/cron`, `/diagnose`, `/upgrade`, `/sessions`, `/tasks`, `/reset`
+- `/status`, `/memory`, `/model`, `/cron`, `/diagnose`, `/clis`, `/upgrade`, `/sessions`, `/tasks`, `/reset`
 
 ## Middleware behavior
 
@@ -172,6 +172,7 @@ Special callback namespaces:
 - `mq:*` queue cancel
 - `upg:*` upgrade flow
 - `ms:*` model selector
+- `cli:*` provider CLI version/upgrade picker
 - `crn:*` cron selector
 - `nsc:*` session selector
 - `tsc:*` task selector

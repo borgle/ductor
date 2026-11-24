@@ -18,6 +18,7 @@ info = "Docs, links e sobre"
 help = "Todos os comandos"
 diagnose = "Diagnóstico do sistema"
 upgrade = "Verificar atualizações"
+clis = "Versões dos CLIs"
 restart = "Reiniciar bot"
 
 [multiagent]

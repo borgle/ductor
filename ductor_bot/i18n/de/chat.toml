@@ -257,6 +257,24 @@ switched_while_busy = "**Modell gewechselt.** Aktueller Prozess läuft noch — 
 
 # -- Cron-Selektor -------------------------------------------------------------
 
+[clis]
+header = "**Provider-CLI-Versionen**"
+line_not_installed = "{label}: nicht installiert"
+line_update = "{label}: {current} -> {latest} verfügbar"
+line_current = "{label}: {version} (aktuell)"
+line_unknown_latest = "{label}: {version}"
+tap_hint = "Tippe auf eine CLI, um sie zu aktualisieren. `Refresh` prüft erneut."
+btn_not_installed = "{label} — nicht installiert"
+btn_update = "{label} {current} ⬆ {latest}"
+btn_current = "{label} {version}"
+btn_refresh = "Aktualisieren"
+unknown_provider = "Unbekannte Provider-CLI: {provider}"
+not_installed = "{label} ist nicht installiert."
+manual = "{label}: automatisches Update wird nicht unterstützt. {hint}"
+no_update = "{label} ist bereits auf {version}."
+upgraded = "{label} auf {version} aktualisiert."
+unknown_action = "Unbekannte Aktion."
+
 [cron]
 header = "**Geplante Aufgaben**"
 empty = "Keine Cron-Jobs konfiguriert."

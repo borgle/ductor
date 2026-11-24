@@ -707,7 +707,7 @@ class SlackBot:
             f"**{t('help.cat_multiagent')}**\n{_line('agent_commands')}\n{_line('agents')}\n"
             f"{_line('agent_start')}\n{_line('agent_stop')}\n{_line('agent_restart')}",
             f"**{t('help.cat_browse')}**\n{_line('showfiles')}\n{_line('info')}\n{_line('help')}",
-            f"**{t('help.cat_maintenance')}**\n{_line('diagnose')}\n{_line('upgrade')}\n{_line('restart')}",
+            f"**{t('help.cat_maintenance')}**\n{_line('diagnose')}\n{_line('clis')}\n{_line('upgrade')}\n{_line('restart')}",
             SEP,
             t("help.slack_footer"),
         )

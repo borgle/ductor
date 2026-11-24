@@ -257,6 +257,24 @@ switched_while_busy = "**Model gewisseld.** Huidig proces draait nog — nieuw m
 
 # -- Cronselector ------------------------------------------------------------------
 
+[clis]
+header = "**Provider-CLI-versies**"
+line_not_installed = "{label}: niet geïnstalleerd"
+line_update = "{label}: {current} -> {latest} beschikbaar"
+line_current = "{label}: {version} (nieuwste)"
+line_unknown_latest = "{label}: {version}"
+tap_hint = "Tik op een CLI om bij te werken. `Refresh` controleert opnieuw."
+btn_not_installed = "{label} — niet geïnstalleerd"
+btn_update = "{label} {current} ⬆ {latest}"
+btn_current = "{label} {version}"
+btn_refresh = "Vernieuwen"
+unknown_provider = "Onbekende provider-CLI: {provider}"
+not_installed = "{label} is niet geïnstalleerd."
+manual = "{label}: automatisch bijwerken wordt niet ondersteund. {hint}"
+no_update = "{label} draait al op {version}."
+upgraded = "{label} bijgewerkt naar {version}."
+unknown_action = "Onbekende actie."
+
 [cron]
 header = "**Geplande taken**"
 empty = "Geen cronjobs geconfigureerd."

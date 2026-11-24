@@ -257,6 +257,24 @@ switched_while_busy = "**Modèle changé.** Le processus en cours continue — l
 
 # -- Sélecteur cron ------------------------------------------------------------
 
+[clis]
+header = "**Versions des CLI de fournisseurs**"
+line_not_installed = "{label} : non installé"
+line_update = "{label} : {current} -> {latest} disponible"
+line_current = "{label} : {version} (dernière)"
+line_unknown_latest = "{label} : {version}"
+tap_hint = "Touche une CLI pour la mettre à jour. `Refresh` vérifie à nouveau."
+btn_not_installed = "{label} — non installé"
+btn_update = "{label} {current} ⬆ {latest}"
+btn_current = "{label} {version}"
+btn_refresh = "Actualiser"
+unknown_provider = "CLI de fournisseur inconnue : {provider}"
+not_installed = "{label} n'est pas installé."
+manual = "{label} : la mise à jour automatique n'est pas prise en charge. {hint}"
+no_update = "{label} est déjà en {version}."
+upgraded = "{label} mis à jour vers {version}."
+unknown_action = "Action inconnue."
+
 [cron]
 header = "**Tâches planifiées**"
 empty = "Aucun cron job configuré."

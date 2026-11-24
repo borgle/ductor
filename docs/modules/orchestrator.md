@@ -72,7 +72,7 @@ Common path:
 
 Registered command handlers:
 
-- `/new`, `/reset`, `/status`, `/model`, `/memory`, `/cron`, `/diagnose`, `/upgrade`, `/sessions`, `/tasks`
+- `/new`, `/reset`, `/status`, `/model`, `/memory`, `/cron`, `/diagnose`, `/clis`, `/upgrade`, `/sessions`, `/tasks`
 
 `/new` resets only the currently configured provider bucket for the active `SessionKey`.
 Other provider buckets for the same chat/topic remain intact.
@@ -110,6 +110,7 @@ Selectors are transport-agnostic and return `SelectorResponse` with abstract but
 Modules:
 
 - `model_selector.py` (`ms:*`)
+- `cli_selector.py` (`cli:*`) — provider CLI versions and upgrades
 - `cron_selector.py` (`crn:*`)
 - `session_selector.py` (`nsc:*`)
 - `task_selector.py` (`tsc:*`)

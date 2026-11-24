@@ -117,7 +117,7 @@ Matrix command ownership (`messenger/matrix/bot.py`):
 
 Orchestrator command registry (`orchestrator/commands.py`):
 
-- `/new`, `/reset`, `/status`, `/model`, `/memory`, `/cron`, `/diagnose`, `/upgrade`, `/sessions`, `/tasks`
+- `/new`, `/reset`, `/status`, `/model`, `/memory`, `/cron`, `/diagnose`, `/clis`, `/upgrade`, `/sessions`, `/tasks`
 - multi-agent commands are registered at runtime by supervisor hook
 
 Abort behavior:

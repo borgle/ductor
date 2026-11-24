@@ -258,6 +258,24 @@ switched_while_busy = "**Model switched.** Current process still running — new
 
 # -- Cron selector -------------------------------------------------------------
 
+[clis]
+header = "**Provider CLI Versions**"
+line_not_installed = "{label}: not installed"
+line_update = "{label}: {current} -> {latest} available"
+line_current = "{label}: {version} (latest)"
+line_unknown_latest = "{label}: {version}"
+tap_hint = "Tap a CLI to upgrade it. `Refresh` re-checks versions."
+btn_not_installed = "{label} — not installed"
+btn_update = "{label} {current} ⬆ {latest}"
+btn_current = "{label} {version}"
+btn_refresh = "Refresh"
+unknown_provider = "Unknown provider CLI: {provider}"
+not_installed = "{label} is not installed."
+manual = "{label}: automatic upgrade is not supported. {hint}"
+no_update = "{label} is already on {version}."
+upgraded = "{label} upgraded to {version}."
+unknown_action = "Unknown action."
+
 [cron]
 header = "**Scheduled Tasks**"
 empty = "No cron jobs configured."

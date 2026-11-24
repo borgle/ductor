@@ -257,6 +257,24 @@ switched_while_busy = "**Модель переключена.** Текущий �
 
 # -- Cron-задачи ---------------------------------------------------------------
 
+[clis]
+header = "**Версии CLI провайдеров**"
+line_not_installed = "{label}: не установлен"
+line_update = "{label}: {current} -> {latest} доступно"
+line_current = "{label}: {version} (последняя)"
+line_unknown_latest = "{label}: {version}"
+tap_hint = "Нажми на CLI, чтобы обновить. `Refresh` проверит снова."
+btn_not_installed = "{label} — не установлен"
+btn_update = "{label} {current} ⬆ {latest}"
+btn_current = "{label} {version}"
+btn_refresh = "Обновить"
+unknown_provider = "Неизвестный CLI провайдера: {provider}"
+not_installed = "{label} не установлен."
+manual = "{label}: автоматическое обновление не поддерживается. {hint}"
+no_update = "{label} уже использует {version}."
+upgraded = "{label} обновлён до {version}."
+unknown_action = "Неизвестное действие."
+
 [cron]
 header = "**Запланированные задачи**"
 empty = "Cron-задачи не настроены."
