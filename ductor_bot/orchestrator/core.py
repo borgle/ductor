@@ -61,6 +61,11 @@ from ductor_bot.orchestrator.memory_flush import MemoryFlusher
 from ductor_bot.orchestrator.observers import ObserverManager
 from ductor_bot.orchestrator.providers import ProviderManager
 from ductor_bot.orchestrator.registry import CommandRegistry, OrchestratorResult
+from ductor_bot.orchestrator.selectors.model_selector import (
+    clear_awaiting_model_search,
+    consume_model_search,
+)
+from ductor_bot.orchestrator.selectors.models import ModelBrowserState
 from ductor_bot.security import detect_suspicious_patterns
 from ductor_bot.session import SessionKey, SessionManager
 from ductor_bot.session.manager import SessionData
@@ -143,6 +148,7 @@ class Orchestrator:
         self._sessions = SessionManager(paths.sessions_path, config)
         self._named_sessions = NamedSessionRegistry(paths.named_sessions_path)
         self._process_registry = ProcessRegistry()
+        self._model_browser: dict[SessionKey, ModelBrowserState] = {}
         self._lock_pool: LockPool | None = None
         self._cli_service = CLIService(
             config=CLIServiceConfig(
@@ -160,6 +166,7 @@ class Orchestrator:
                 gemini_cli_parameters=tuple(config.cli_parameters.gemini),
                 antigravity_cli_parameters=tuple(config.cli_parameters.antigravity),
                 grok_cli_parameters=tuple(config.cli_parameters.grok),
+                pi_cli_parameters=tuple(config.cli_parameters.pi),
                 agent_name=agent_name,
                 interagent_port=interagent_port,
                 transcribe_command=config.transcription.audio_command,
@@ -375,7 +382,9 @@ class Orchestrator:
             logger.exception("Unexpected error in handle_message")
             return OrchestratorResult(text="An internal error occurred. Please try again.")
 
-    async def _route_message(self, dispatch: _MessageDispatch) -> OrchestratorResult:
+    async def _route_message(  # noqa: PLR0911
+        self, dispatch: _MessageDispatch
+    ) -> OrchestratorResult:
         result = await self._command_registry.dispatch(
             dispatch.cmd,
             self,
@@ -383,7 +392,16 @@ class Orchestrator:
             dispatch.text,
         )
         if result is not None:
+            # Any command supersedes a pending "type a filter" prompt. Keep the
+            # browser state itself intact so command results can still paginate.
+            clear_awaiting_model_search(self, dispatch.key)
             return result
+
+        # A plain message while the model browser is waiting for a filter is
+        # the filter query itself, not a prompt for the CLI.
+        search_resp = await consume_model_search(self, dispatch.key, dispatch.text)
+        if search_resp is not None:
+            return OrchestratorResult(text=search_resp.text, buttons=search_resp.buttons)
 
         await self._ensure_docker()
 
@@ -783,6 +801,8 @@ class Orchestrator:
                     codex_cli_parameters=tuple(config.cli_parameters.codex),
                     gemini_cli_parameters=tuple(config.cli_parameters.gemini),
                     antigravity_cli_parameters=tuple(config.cli_parameters.antigravity),
+                    grok_cli_parameters=tuple(config.cli_parameters.grok),
+                    pi_cli_parameters=tuple(config.cli_parameters.pi),
                     transcribe_command=config.transcription.audio_command,
                     video_transcribe_command=config.transcription.video_command,
                 )

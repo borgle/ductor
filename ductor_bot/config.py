@@ -208,6 +208,7 @@ class CLIParametersConfig(BaseModel):
     gemini: list[str] = Field(default_factory=list)
     antigravity: list[str] = Field(default_factory=list)
     grok: list[str] = Field(default_factory=list)
+    pi: list[str] = Field(default_factory=list)
 
 
 class MatrixConfig(BaseModel):
@@ -408,6 +409,7 @@ class SkillSyncProviders(BaseModel):
     codex: bool = True
     gemini: bool = True
     grok: bool = True
+    pi: bool = True
 
 
 class SkillsConfig(BaseModel):
@@ -635,10 +637,29 @@ GROK_SUPPORTED_EFFORTS: tuple[str, ...] = (
     "max",
 )
 
+# Pi is a multi-provider harness. ductor stores its models as
+# ``pi/<pi-provider>/<model-id>`` so they never collide with native provider
+# IDs; plain ``<pi-provider>/<model-id>`` IDs are also recognized once the Pi
+# catalog has been discovered.
+PI_MODEL_PREFIX = "pi/"
+# Pi accepts off/minimal/low/medium/high/xhigh/max and clamps unsupported
+# levels per model. ductor's "none" maps to Pi's "off".
+PI_SUPPORTED_EFFORTS: tuple[str, ...] = (
+    "none",
+    "minimal",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+)
+
 _runtime_gemini: list[frozenset[str]] = [frozenset()]
 _runtime_antigravity: list[frozenset[str]] = [frozenset()]
 _runtime_grok: list[frozenset[str]] = [frozenset()]
 _runtime_grok_ordered: list[tuple[str, ...]] = [()]
+_runtime_pi: list[frozenset[str]] = [frozenset()]
+_runtime_pi_ordered: list[tuple[str, ...]] = [()]
 
 
 class ModelRegistry:
@@ -673,6 +694,8 @@ class ModelRegistry:
             return "antigravity"
         if model_id in GROK_MODELS or model_id in _runtime_grok[0] or model_id.startswith("grok-"):
             return "grok"
+        if is_pi_model_id(model_id):
+            return "pi"
         return "codex"
 
 
@@ -751,3 +774,44 @@ def reset_grok_models() -> None:
     """Clear runtime Grok models. For test teardown only."""
     _runtime_grok[0] = frozenset()
     _runtime_grok_ordered[0] = ()
+
+
+def is_pi_model_id(model_id: str) -> bool:
+    """Return True when *model_id* addresses a Pi catalog model."""
+    if model_id.startswith(PI_MODEL_PREFIX):
+        return True
+    return bool(model_id) and f"{PI_MODEL_PREFIX}{model_id}" in _runtime_pi[0]
+
+
+def get_pi_models() -> frozenset[str]:
+    """Return dynamically discovered Pi model IDs (``pi/<provider>/<model>``)."""
+    return _runtime_pi[0]
+
+
+def get_pi_models_ordered() -> tuple[str, ...]:
+    """Return Pi model IDs in discovery order."""
+    return _runtime_pi_ordered[0]
+
+
+def set_pi_models(models: tuple[str, ...] | frozenset[str] | list[str]) -> None:
+    """Set runtime Pi models discovered from ``pi --list-models``.
+
+    Refuses to overwrite with an empty set to prevent cache wipe. Preserves
+    discovery order when a sequence is provided.
+    """
+    if not models:
+        return
+    if isinstance(models, frozenset):
+        ordered = tuple(sorted(models))
+    else:
+        ordered = tuple(dict.fromkeys(models))
+    if not ordered:
+        return
+    _runtime_pi_ordered[0] = ordered
+    _runtime_pi[0] = frozenset(ordered)
+
+
+def reset_pi_models() -> None:
+    """Clear runtime Pi models. For test teardown only."""
+    _runtime_pi[0] = frozenset()
+    _runtime_pi_ordered[0] = ()

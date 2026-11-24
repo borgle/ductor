@@ -111,7 +111,7 @@ One-shot isolated run in task folder:
 2. quiet-hour gate (hook-level only; no heartbeat quiet-hour fallback)
 3. dependency lock
 4. resolve task execution config
-5. build provider command (Claude/Codex/Gemini/Grok)
+5. build provider command (Claude/Codex/Gemini/Grok/Pi)
 6. execute with timeout
 7. parse result and return `WebhookResult`
 

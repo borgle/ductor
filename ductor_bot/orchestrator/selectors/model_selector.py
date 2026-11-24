@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -14,14 +15,22 @@ from ductor_bot.config import (
     CLAUDE_SUPPORTED_EFFORTS,
     CODEX_SUPPORTED_EFFORTS_FALLBACK,
     GROK_SUPPORTED_EFFORTS,
+    PI_MODEL_PREFIX,
+    PI_SUPPORTED_EFFORTS,
     get_antigravity_models,
     get_gemini_models,
     get_grok_models_ordered,
+    get_pi_models_ordered,
     update_config_file_async,
 )
 from ductor_bot.i18n import t
 from ductor_bot.multiagent.registry import update_agent_fields
-from ductor_bot.orchestrator.selectors.models import Button, ButtonGrid, SelectorResponse
+from ductor_bot.orchestrator.selectors.models import (
+    Button,
+    ButtonGrid,
+    ModelBrowserState,
+    SelectorResponse,
+)
 
 if TYPE_CHECKING:
     from ductor_bot.cli.codex_cache import CodexModelCache
@@ -116,6 +125,8 @@ def _supported_efforts(orch: Orchestrator, model_id: str) -> tuple[str, ...]:
         return CLAUDE_SUPPORTED_EFFORTS
     if provider == "grok":
         return GROK_SUPPORTED_EFFORTS
+    if provider == "pi":
+        return PI_SUPPORTED_EFFORTS
     if provider == "codex":
         codex_cache = (
             orch._observers.codex_cache_obs.get_cache() if orch._observers.codex_cache_obs else None
@@ -140,7 +151,7 @@ def _validate_reasoning_effort(
     """
     if not reasoning_effort:
         return None
-    if orch.models.provider_for(model_id) not in ("codex", "claude", "grok"):
+    if orch.models.provider_for(model_id) not in ("codex", "claude", "grok", "pi"):
         return None
 
     supported = _supported_efforts(orch, model_id)
@@ -166,13 +177,33 @@ def _gemini_models_for_selector() -> list[str]:
     # Prefer stable models before previews in the selector.
     stable = [model for model in models if "preview" not in model]
     preview = [model for model in models if "preview" in model]
-    return [*_GEMINI_ALIAS_ORDER, *stable, *preview]
+    return list(dict.fromkeys([*_GEMINI_ALIAS_ORDER, *stable, *preview]))
 
 
 def _antigravity_models_for_selector() -> list[str]:
     """Return the agy default, then models discovered from ``agy models``."""
     discovered = sorted(get_antigravity_models())
-    return [*ANTIGRAVITY_MODELS_ORDERED, *discovered]
+    return list(dict.fromkeys([*ANTIGRAVITY_MODELS_ORDERED, *discovered]))
+
+
+# Telegram tolerates large keyboards, but Matrix renders every button as a
+# numbered option and reacts to only the first 10. Keep pages within that limit
+# there while showing more models at once on Telegram.
+_BROWSER_PAGE_SIZE_TG = 8
+_BROWSER_PAGE_SIZE_MX = 5
+_SEARCH_PROMPT_TTL = 300.0
+_SEARCH_QUERY_MAX_LEN = 120
+
+PROVIDERS: tuple[str, ...] = ("claude", "codex", "gemini", "antigravity", "grok", "pi")
+
+
+@dataclass(frozen=True, slots=True)
+class _ModelEntry:
+    """One selectable model, with the text used to search it."""
+
+    model_id: str
+    label: str
+    description: str = ""
 
 
 def _button_label(model_id: str) -> str:
@@ -180,29 +211,281 @@ def _button_label(model_id: str) -> str:
     return model_id.removeprefix("gemini-").removeprefix("auto-")
 
 
+def _fit_button_label(label: str, *, limit: int = 60) -> str:
+    """Clamp a label to Telegram's inline-button text limit."""
+    return label if len(label) <= limit else f"{label[: limit - 1]}…"
+
+
 def _rows_of(buttons: list[Button], *, per_row: int = 2) -> list[list[Button]]:
     """Split buttons into rows of at most *per_row* (readability on mobile)."""
     return [buttons[i : i + per_row] for i in range(0, len(buttons), per_row)]
 
 
-def _chunk_buttons(
-    model_ids: list[str],
-    *,
-    columns: int = 2,
-) -> list[list[Button]]:
-    rows: list[list[Button]] = []
-    for index in range(0, len(model_ids), columns):
-        chunk = model_ids[index : index + columns]
-        rows.append(
-            [
-                Button(
-                    text=_button_label(model_id),
-                    callback_data=f"ms:m:{model_id}",
-                )
-                for model_id in chunk
-            ]
+def _page_size(key: SessionKey) -> int:
+    """Number of model buttons per page for the transport in *key*."""
+    return _BROWSER_PAGE_SIZE_MX if key.transport == "mx" else _BROWSER_PAGE_SIZE_TG
+
+
+def _codex_cache(orch: Orchestrator) -> CodexModelCache | None:
+    observer = orch._observers.codex_cache_obs
+    return observer.get_cache() if observer else None
+
+
+def _model_entries(  # noqa: PLR0911
+    provider: str, codex_cache: CodexModelCache | None
+) -> list[_ModelEntry]:
+    """Return the ordered, searchable model catalog for *provider*."""
+    if provider == "claude":
+        return [_ModelEntry(model_id=m, label=m.upper()) for m in CLAUDE_MODELS_ORDERED]
+    if provider == "gemini":
+        return [
+            _ModelEntry(model_id=m, label=_button_label(m)) for m in _gemini_models_for_selector()
+        ]
+    if provider == "antigravity":
+        return [_ModelEntry(model_id=m, label=m) for m in _antigravity_models_for_selector()]
+    if provider == "grok":
+        return [_ModelEntry(model_id=m, label=m) for m in get_grok_models_ordered()]
+    if provider == "pi":
+        return [
+            _ModelEntry(model_id=m, label=m.removeprefix(PI_MODEL_PREFIX))
+            for m in get_pi_models_ordered()
+        ]
+    if provider == "codex":
+        models = codex_cache.models if codex_cache else []
+        return [
+            _ModelEntry(
+                model_id=m.id,
+                label=m.display_name or m.id,
+                description=m.description,
+            )
+            for m in models
+        ]
+    return []
+
+
+def _filter_entries(entries: list[_ModelEntry], query: str) -> list[_ModelEntry]:
+    """Case-insensitive multi-token filter over id, label, and description."""
+    tokens = [token for token in query.casefold().split() if token]
+    if not tokens:
+        return entries
+    return [
+        entry
+        for entry in entries
+        if all(
+            token in f"{entry.model_id} {entry.label} {entry.description}".casefold()
+            for token in tokens
         )
+    ]
+
+
+def _safe_query(query: str) -> str:
+    """Keep user-entered filter text from breaking Markdown rendering."""
+    return query.replace("`", "'").replace("\n", " ").strip()[:80]
+
+
+def _select_prompt(provider: str) -> str:
+    return t(f"model.select_{provider}")
+
+
+def _page_count(total: int, size: int) -> int:
+    return max(1, (total + size - 1) // size)
+
+
+def _browser_text(  # noqa: PLR0913
+    header: str,
+    provider: str,
+    *,
+    query: str,
+    total: int,
+    page: int,
+    pages: int,
+) -> str:
+    lines = [header, "", _select_prompt(provider)]
+    if pages > 1:
+        lines.append(t("model.page_indicator", page=page + 1, total=pages))
+    if query:
+        lines.append(t("model.filter_indicator", query=_safe_query(query), count=total))
+    return "\n".join(lines)
+
+
+def _no_models_text(header: str, provider: str, query: str) -> str:
+    if query:
+        return f"{header}\n\n{t('model.no_match', provider=provider.upper(), query=_safe_query(query))}"
+    if provider == "codex":
+        return f"{header}\n\n{t('model.no_codex')}"
+    if provider == "gemini":
+        return f"{header}\n\n{t('model.no_gemini')}"
+    return f"{header}\n\n{t('model.no_models', provider=provider.upper())}"
+
+
+def _browser_rows(
+    provider: str,
+    entries: list[_ModelEntry],
+    *,
+    page: int,
+    pages: int,
+    query: str,
+) -> list[list[Button]]:
+    rows = _rows_of(
+        [
+            Button(
+                text=_fit_button_label(entry.label),
+                callback_data=f"ms:m:{entry.model_id}",
+            )
+            for entry in entries
+        ]
+    )
+
+    if pages > 1:
+        nav: list[Button] = []
+        if page > 0:
+            nav.append(Button(text=t("model.btn_prev"), callback_data=f"ms:g:{page - 1}"))
+        if page < pages - 1:
+            nav.append(Button(text=t("model.btn_next"), callback_data=f"ms:g:{page + 1}"))
+        if nav:
+            rows.append(nav)
+
+    actions: list[Button] = []
+    if query:
+        actions.append(Button(text=t("model.btn_clear"), callback_data=f"ms:p:{provider}"))
+    actions.append(Button(text=t("model.btn_search"), callback_data=f"ms:s:{provider}"))
+    actions.append(Button(text=t("model.btn_back"), callback_data="ms:b:root"))
+    rows.append(actions)
     return rows
+
+
+def _store_browser_state(  # noqa: PLR0913
+    orch: Orchestrator,
+    key: SessionKey,
+    *,
+    provider: str,
+    query: str,
+    page: int,
+    awaiting_query: bool = False,
+) -> None:
+    orch._model_browser[key] = ModelBrowserState(
+        provider=provider,
+        query=query,
+        page=page,
+        awaiting_query=awaiting_query,
+        updated_at=time.monotonic(),
+    )
+
+
+def clear_awaiting_model_search(orch: Orchestrator, key: SessionKey) -> None:
+    """Stop treating the next message as a model-filter query."""
+    state = orch._model_browser.get(key)
+    if state is not None and state.awaiting_query:
+        state.awaiting_query = False
+
+
+async def consume_model_search(
+    orch: Orchestrator,
+    key: SessionKey,
+    text: str,
+) -> SelectorResponse | None:
+    """Consume *text* as a model filter when the browser asked for one.
+
+    Returns ``None`` for anything that is not a pending search query (including
+    stale prompts and slash commands) so normal message routing continues.
+    """
+    state = orch._model_browser.get(key)
+    if state is None or not state.awaiting_query:
+        return None
+    if time.monotonic() - state.updated_at > _SEARCH_PROMPT_TTL:
+        orch._model_browser.pop(key, None)
+        return None
+
+    query = text.strip()
+    # Never swallow commands, directives, or full prompts: only short plain
+    # text is treated as a filter keyword.
+    if not query or query.startswith(("/", "@")) or len(query) > _SEARCH_QUERY_MAX_LEN:
+        clear_awaiting_model_search(orch, key)
+        return None
+    if query.casefold() in {"cancel", "abort"}:
+        clear_awaiting_model_search(orch, key)
+        return await _show_models(orch, key, state.provider)
+
+    return await _show_models(orch, key, state.provider, query=query)
+
+
+async def show_provider_models(
+    orch: Orchestrator,
+    key: SessionKey,
+    provider: str,
+    *,
+    query: str = "",
+    page: int = 0,
+) -> SelectorResponse:
+    """Public entry point for ``/model <provider> [keyword]``."""
+    return await _show_models(orch, key, provider, query=query, page=page)
+
+
+async def _show_models(
+    orch: Orchestrator,
+    key: SessionKey,
+    provider: str,
+    *,
+    query: str = "",
+    page: int = 0,
+) -> SelectorResponse:
+    """Render one page of a provider's (optionally filtered) model catalog."""
+    entries = _filter_entries(_model_entries(provider, _codex_cache(orch)), query)
+    size = _page_size(key)
+    pages = _page_count(len(entries), size)
+    page = max(0, min(page, pages - 1))
+    _store_browser_state(orch, key, provider=provider, query=query, page=page)
+
+    header = await _status_line(orch, key)
+    if not entries:
+        rows = [
+            [Button(text=t("model.btn_back"), callback_data="ms:b:root")],
+        ]
+        if query:
+            rows.insert(
+                0,
+                [Button(text=t("model.btn_clear"), callback_data=f"ms:p:{provider}")],
+            )
+        return SelectorResponse(
+            text=_no_models_text(header, provider, query),
+            buttons=ButtonGrid(rows=rows),
+        )
+
+    start = page * size
+    rows = _browser_rows(
+        provider,
+        entries[start : start + size],
+        page=page,
+        pages=pages,
+        query=query,
+    )
+    text = _browser_text(
+        header,
+        provider,
+        query=query,
+        total=len(entries),
+        page=page,
+        pages=pages,
+    )
+    return SelectorResponse(text=text, buttons=ButtonGrid(rows=rows))
+
+
+async def _search_prompt(orch: Orchestrator, key: SessionKey, provider: str) -> SelectorResponse:
+    """Ask for a filter keyword and arm the next plain message as the query."""
+    _store_browser_state(
+        orch,
+        key,
+        provider=provider,
+        query="",
+        page=0,
+        awaiting_query=True,
+    )
+    header = await _status_line(orch, key)
+    keyboard = ButtonGrid(rows=[[Button(text=t("model.btn_cancel"), callback_data="ms:c")]])
+    return SelectorResponse(
+        text=f"{header}\n\n{t('model.search_prompt', provider=provider.upper())}",
+        buttons=keyboard,
+    )
 
 
 def is_model_selector_callback(data: str) -> bool:
@@ -235,11 +518,7 @@ async def model_selector_start(
         )
 
     if len(authed) == 1:
-        provider = authed[0]
-        codex_cache = (
-            orch._observers.codex_cache_obs.get_cache() if orch._observers.codex_cache_obs else None
-        )
-        return await _build_model_step(provider, header, codex_cache)
+        return await _show_models(orch, key, authed[0])
 
     buttons: list[Button] = []
     if "claude" in authed:
@@ -252,6 +531,8 @@ async def model_selector_start(
         buttons.append(Button(text="ANTIGRAVITY", callback_data="ms:p:antigravity"))
     if "grok" in authed:
         buttons.append(Button(text="GROK BUILD", callback_data="ms:p:grok"))
+    if "pi" in authed:
+        buttons.append(Button(text="PI", callback_data="ms:p:pi"))
 
     provider_rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
     keyboard = ButtonGrid(rows=provider_rows)
@@ -295,7 +576,7 @@ async def effort_selector_start(
     return SelectorResponse(text=f"{header}\n\n{t('effort.select', model=model)}", buttons=keyboard)
 
 
-async def handle_model_callback(  # noqa: PLR0911
+async def handle_model_callback(  # noqa: C901, PLR0911, PLR0912
     orch: Orchestrator,
     key: SessionKey,
     data: str,
@@ -310,12 +591,31 @@ async def handle_model_callback(  # noqa: PLR0911
     payload = parts[1] if len(parts) > 1 else ""
     extra = parts[2] if len(parts) > 2 else ""
 
-    codex_cache = (
-        orch._observers.codex_cache_obs.get_cache() if orch._observers.codex_cache_obs else None
-    )
-
     if action == "p":
-        return await _build_model_step(payload, await _status_line(orch, key), codex_cache)
+        # Opening a provider starts a fresh, unfiltered browse.
+        if payload not in PROVIDERS:
+            return await model_selector_start(orch, key)
+        page = int(extra) if extra.isdigit() else 0
+        return await _show_models(orch, key, payload, page=page)
+
+    if action == "g":
+        # Page navigation preserves the active filter.
+        state = orch._model_browser.get(key)
+        if state is None:
+            return await model_selector_start(orch, key)
+        page = int(payload) if payload.isdigit() else 0
+        return await _show_models(orch, key, state.provider, query=state.query, page=page)
+
+    if action == "s":
+        state = orch._model_browser.get(key)
+        provider = payload or (state.provider if state else "")
+        if provider not in PROVIDERS:
+            return await model_selector_start(orch, key)
+        return await _search_prompt(orch, key, provider)
+
+    if action == "c":
+        orch._model_browser.pop(key, None)
+        return await model_selector_start(orch, key)
 
     if action == "m":
         return await _handle_model_selected(orch, key, payload)
@@ -329,7 +629,10 @@ async def handle_model_callback(  # noqa: PLR0911
     if action == "b":
         if payload == "root":
             return await model_selector_start(orch, key)
-        return await _build_model_step(payload, await _status_line(orch, key), codex_cache)
+        state = orch._model_browser.get(key)
+        if state is not None and state.provider == payload:
+            return await _show_models(orch, key, payload, query=state.query, page=state.page)
+        return await _show_models(orch, key, payload)
 
     logger.warning("Unknown model selector callback: %s", data)
     return SelectorResponse(text=t("model.unknown_action"))
@@ -451,6 +754,8 @@ async def switch_model(
     if validation_error is not None:
         return validation_error
 
+    orch._model_browser.pop(key, None)
+
     resume_session_id, resume_message_count = await _persist_switch_target(
         orch,
         key,
@@ -502,7 +807,7 @@ async def switch_model(
             # Codex and Claude both use reasoning_effort — only drop it when
             # switching to a provider that has no notion of effort.
             if (
-                new_provider not in {"codex", "claude", "grok"}
+                new_provider not in {"codex", "claude", "grok", "pi"}
                 and "reasoning_effort" not in registry_updates
             ):
                 registry_updates["reasoning_effort"] = None
@@ -548,7 +853,7 @@ async def _status_line(orch: Orchestrator, key: SessionKey) -> str:
         model, provider = orch.resolve_runtime_target(orch._config.model)
         effort = orch._config.reasoning_effort
 
-    if provider in ("codex", "claude", "grok") and effort and effort != "default":
+    if provider in ("codex", "claude", "grok", "pi") and effort and effort != "default":
         current = (
             f"{t('model.header')}\n{t('model.current_with_effort', model=model, effort=effort)}"
         )
@@ -561,74 +866,6 @@ async def _status_line(orch: Orchestrator, key: SessionKey) -> str:
             current += f"\n{t('model.configured_default', configured=configured)}"
 
     return current
-
-
-async def _build_model_step(
-    provider: str,
-    header: str,
-    codex_cache: CodexModelCache | None = None,
-) -> SelectorResponse:
-    """Build the model selection keyboard for a provider."""
-    if provider in ("claude", "grok"):
-        if provider == "claude":
-            buttons = [
-                Button(text=m.upper(), callback_data=f"ms:m:{m}") for m in CLAUDE_MODELS_ORDERED
-            ]
-            prompt = t("model.select_claude")
-        else:
-            buttons = [Button(text=m, callback_data=f"ms:m:{m}") for m in get_grok_models_ordered()]
-            prompt = t("model.select_grok")
-        keyboard = ButtonGrid(
-            rows=[
-                *_rows_of(buttons),
-                [Button(text=t("model.btn_back"), callback_data="ms:b:root")],
-            ]
-        )
-        return SelectorResponse(text=f"{header}\n\n{prompt}", buttons=keyboard)
-
-    if provider == "gemini":
-        gemini_models = _gemini_models_for_selector()
-        if not gemini_models:
-            keyboard = ButtonGrid(
-                rows=[
-                    [Button(text=t("model.btn_back"), callback_data="ms:b:root")],
-                ]
-            )
-            return SelectorResponse(
-                text=f"{header}\n\n{t('model.no_gemini')}",
-                buttons=keyboard,
-            )
-
-        gemini_rows = _chunk_buttons(gemini_models)
-        gemini_rows.append([Button(text=t("model.btn_back"), callback_data="ms:b:root")])
-        keyboard = ButtonGrid(rows=gemini_rows)
-        return SelectorResponse(text=f"{header}\n\n{t('model.select_gemini')}", buttons=keyboard)
-
-    if provider == "antigravity":
-        antigravity_rows = _chunk_buttons(_antigravity_models_for_selector(), columns=1)
-        antigravity_rows.append([Button(text=t("model.btn_back"), callback_data="ms:b:root")])
-        keyboard = ButtonGrid(rows=antigravity_rows)
-        return SelectorResponse(
-            text=f"{header}\n\n{t('model.select_antigravity')}", buttons=keyboard
-        )
-
-    # Use cache instead of live discovery
-    codex_models = codex_cache.models if codex_cache else []
-    if not codex_models:
-        keyboard = ButtonGrid(
-            rows=[
-                [Button(text=t("model.btn_back"), callback_data="ms:b:root")],
-            ]
-        )
-        return SelectorResponse(text=f"{header}\n\n{t('model.no_codex')}", buttons=keyboard)
-
-    rows: list[list[Button]] = [
-        [Button(text=m.display_name, callback_data=f"ms:m:{m.id}")] for m in codex_models
-    ]
-    rows.append([Button(text=t("model.btn_back"), callback_data="ms:b:root")])
-
-    keyboard = ButtonGrid(rows=rows)
-    return SelectorResponse(text=f"{header}\n\n{t('model.select_codex')}", buttons=keyboard)
 
 
 async def _handle_model_selected(
@@ -719,10 +956,12 @@ async def _handle_effort_selected(
             effort = "medium"
         await orch._sessions.resolve_session(key, model=model, reasoning_effort=effort)
         _kill_interactive_repl(orch, key)
+        orch._model_browser.pop(key, None)
         return SelectorResponse(text=t("model.effort_updated", effort=effort))
 
     if _validate_reasoning_effort(orch, session.model, effort) is not None:
         effort = "medium"
+    orch._model_browser.pop(key, None)
     await orch._sessions.sync_session_target(session, reasoning_effort=effort)
     _kill_interactive_repl(orch, key)
     return SelectorResponse(text=t("model.effort_updated", effort=effort))

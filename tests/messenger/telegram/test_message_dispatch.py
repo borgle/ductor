@@ -18,6 +18,7 @@ from ductor_bot.messenger.telegram.message_dispatch import (
     run_streaming_message,
 )
 from ductor_bot.orchestrator.registry import OrchestratorResult
+from ductor_bot.orchestrator.selectors.models import Button, ButtonGrid
 from ductor_bot.session.key import SessionKey
 
 
@@ -159,6 +160,51 @@ async def test_non_streaming_reacts_on_trigger_message_not_reply_to() -> None:
         assert call.kwargs["message_id"] == 777, (
             f"expected reaction on trigger (777), got {call.kwargs['message_id']}"
         )
+
+
+async def test_non_streaming_attaches_selector_buttons() -> None:
+    """Selector results returned by plain messages keep their keyboard."""
+    bot = _make_bot()
+    trigger = MagicMock()
+    trigger.message_id = 777
+
+    scene = MagicMock()
+    scene.status_reaction = False
+    scene.technical_footer = False
+
+    orchestrator = MagicMock()
+    orchestrator.handle_message = AsyncMock(
+        return_value=OrchestratorResult(
+            text="Pick a model",
+            buttons=ButtonGrid(rows=[[Button(text="Sonnet", callback_data="ms:m:sonnet")]]),
+        )
+    )
+
+    dispatch = NonStreamingDispatch(
+        bot=bot,
+        orchestrator=orchestrator,
+        key=SessionKey(chat_id=1),
+        text="son",
+        allowed_roots=[Path("/tmp")],
+        message=trigger,
+        reply_to=trigger,
+        scene_config=scene,
+    )
+
+    with (
+        patch(
+            "ductor_bot.messenger.telegram.message_dispatch.send_rich",
+            new_callable=AsyncMock,
+        ) as send_mock,
+        patch("ductor_bot.messenger.telegram.message_dispatch.TypingContext") as typing_ctx,
+    ):
+        typing_ctx.return_value.__aenter__ = AsyncMock()
+        typing_ctx.return_value.__aexit__ = AsyncMock()
+        await run_non_streaming_message(dispatch)
+
+    opts = send_mock.call_args.args[3]
+    assert opts.reply_markup is not None
+    assert opts.reply_markup.inline_keyboard[0][0].callback_data == "ms:m:sonnet"
 
 
 if __name__ == "__main__":  # pragma: no cover

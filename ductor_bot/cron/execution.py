@@ -17,6 +17,8 @@ from ductor_bot.cli.gemini_events import parse_gemini_json
 from ductor_bot.cli.gemini_utils import find_gemini_cli
 from ductor_bot.cli.grok_events import parse_grok_json
 from ductor_bot.cli.param_resolver import TaskExecutionConfig
+from ductor_bot.cli.pi_events import parse_pi_json
+from ductor_bot.cli.pi_utils import pi_effort, split_pi_model_id
 from ductor_bot.infra.platform import CREATION_FLAGS as _CREATION_FLAGS
 from ductor_bot.infra.process_tree import force_kill_process_tree
 
@@ -105,6 +107,21 @@ def parse_grok_result(stdout: bytes) -> str:
     text, _session_id, _usage, _model_usage, _turns, _is_error, _cost = parse_grok_json(raw)
     if text:
         return text
+    return raw[:2000]
+
+
+def parse_pi_result(stdout: bytes) -> str:
+    """Extract result text from Pi CLI JSONL output."""
+    if not stdout:
+        return ""
+    raw = stdout.decode(errors="replace").strip()
+    if not raw:
+        return ""
+    text, _session_id, _usage, _turns, _is_error, _cost = parse_pi_json(raw)
+    if text:
+        return text
+    if raw.lstrip().startswith("{"):
+        return ""
     return raw[:2000]
 
 
@@ -228,6 +245,27 @@ def _build_grok_cmd(exec_config: TaskExecutionConfig, prompt: str) -> OneShotCom
     return OneShotCommand(cmd=cmd, cleanup_paths=cleanup)
 
 
+def _build_pi_cmd(exec_config: TaskExecutionConfig, prompt: str) -> OneShotCommand | None:
+    """Build a Pi CLI command for one-shot cron execution (prompt via stdin)."""
+    cli = which("pi")
+    if not cli:
+        return None
+    cmd = [cli, "--print", "--mode", "json"]
+    if exec_config.permission_mode == "bypassPermissions":
+        cmd.append("--approve")
+    if exec_config.model:
+        parts = split_pi_model_id(exec_config.model)
+        if parts is None:
+            cmd += ["--model", exec_config.model]
+        else:
+            cmd += ["--provider", parts[0], "--model", parts[1]]
+    effort = pi_effort(exec_config.reasoning_effort)
+    if effort:
+        cmd += ["--thinking", effort]
+    cmd.extend(exec_config.cli_parameters)
+    return OneShotCommand(cmd=cmd, stdin_input=prompt.encode())
+
+
 _CmdBuilder = Callable[[TaskExecutionConfig, str], OneShotCommand | None]
 _ResultParser = Callable[[bytes], str]
 
@@ -236,6 +274,7 @@ _CMD_BUILDERS: dict[str, _CmdBuilder] = {
     "gemini": _build_gemini_cmd,
     "codex": _build_codex_cmd,
     "grok": _build_grok_cmd,
+    "pi": _build_pi_cmd,
 }
 
 _RESULT_PARSERS: dict[str, _ResultParser] = {
@@ -243,6 +282,7 @@ _RESULT_PARSERS: dict[str, _ResultParser] = {
     "gemini": parse_gemini_result,
     "codex": parse_codex_result,
     "grok": parse_grok_result,
+    "pi": parse_pi_result,
 }
 
 

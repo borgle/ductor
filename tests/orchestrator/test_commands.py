@@ -34,6 +34,25 @@ async def test_model_list_returns_keyboard(orch: Orchestrator) -> None:
     assert "Model Selector" in result.text
 
 
+async def test_model_provider_opens_model_browser(orch: Orchestrator) -> None:
+    result = await cmd_model(orch, SessionKey(chat_id=1), "/model claude")
+    assert result.buttons is not None
+    assert "Select Claude model" in result.text
+    labels = [b.text for row in result.buttons.rows for b in row]
+    assert "OPUS" in labels
+    assert "Search" in labels
+
+
+async def test_model_provider_query_filters_models(orch: Orchestrator) -> None:
+    result = await cmd_model(orch, SessionKey(chat_id=1), "/model claude son")
+    assert result.buttons is not None
+    labels = [b.text for row in result.buttons.rows for b in row]
+    assert "SONNET" in labels
+    assert "SONNET[1M]" in labels
+    assert "OPUS" not in labels
+    assert "Filter:" in result.text
+
+
 async def test_model_direct_switch(orch: Orchestrator) -> None:
     kill_mock = AsyncMock(return_value=0)
     object.__setattr__(orch._process_registry, "kill_by_chat_topic", kill_mock)

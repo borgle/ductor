@@ -15,13 +15,20 @@ from ductor_bot.cli.auth import AuthResult, AuthStatus
 from ductor_bot.cli.codex_cache import CodexModelCache
 from ductor_bot.cli.codex_discovery import CodexModelInfo
 from ductor_bot.cli.types import AgentResponse
-from ductor_bot.config import reset_gemini_models, set_gemini_models
+from ductor_bot.config import (
+    reset_gemini_models,
+    reset_pi_models,
+    set_gemini_models,
+    set_pi_models,
+)
 from ductor_bot.orchestrator.core import Orchestrator
 from ductor_bot.orchestrator.flows import normal
 from ductor_bot.orchestrator.selectors.model_selector import (
+    consume_model_search,
     handle_model_callback,
     is_model_selector_callback,
     model_selector_start,
+    show_provider_models,
     switch_model,
 )
 from ductor_bot.session.key import SessionKey
@@ -31,7 +38,9 @@ _AUTHED_CLAUDE = AuthResult("claude", AuthStatus.AUTHENTICATED)
 _AUTHED_CODEX = AuthResult("codex", AuthStatus.AUTHENTICATED)
 _AUTHED_GEMINI = AuthResult("gemini", AuthStatus.AUTHENTICATED)
 _AUTHED_ANTIGRAVITY = AuthResult("antigravity", AuthStatus.AUTHENTICATED)
+_AUTHED_PI = AuthResult("pi", AuthStatus.AUTHENTICATED)
 _NOT_FOUND_CLAUDE = AuthResult("claude", AuthStatus.NOT_FOUND)
+_NOT_FOUND_PI = AuthResult("pi", AuthStatus.NOT_FOUND)
 _NOT_FOUND_CODEX = AuthResult("codex", AuthStatus.NOT_FOUND)
 _NOT_FOUND_GEMINI = AuthResult("gemini", AuthStatus.NOT_FOUND)
 
@@ -65,8 +74,10 @@ def _patch_auth(auth_map: dict[str, AuthResult]) -> Any:
 @pytest.fixture(autouse=True)
 def _reset_gemini_models() -> Any:
     reset_gemini_models()
+    reset_pi_models()
     yield
     reset_gemini_models()
+    reset_pi_models()
 
 
 @contextmanager
@@ -262,6 +273,190 @@ async def test_callback_provider_antigravity(orch: Orchestrator) -> None:
     assert resp.buttons is not None
     labels = [btn.text for row in resp.buttons.rows for btn in row]
     assert "antigravity-default" in labels
+
+
+# -- Pi provider --
+
+
+async def test_start_lists_pi_provider(orch: Orchestrator) -> None:
+    with _patch_auth({"claude": _AUTHED_CLAUDE, "codex": _NOT_FOUND_CODEX, "pi": _AUTHED_PI}):
+        resp = await model_selector_start(orch, SessionKey(chat_id=1))
+
+    assert resp.buttons is not None
+    labels = [btn.text for row in resp.buttons.rows for btn in row]
+    assert "PI" in labels
+
+
+async def test_callback_provider_pi_lists_catalog_models(orch: Orchestrator) -> None:
+    set_pi_models(
+        (
+            "pi/opencode-go/deepseek-v4.1-flash",
+            "pi/opencode-go/claude-haiku-5-5",
+            "pi/openrouter/google/gemini-flash-image",
+        )
+    )
+    resp = await handle_model_callback(orch, SessionKey(chat_id=1), "ms:p:pi")
+
+    assert "Select Pi model" in resp.text
+    assert resp.buttons is not None
+    labels = [btn.text for row in resp.buttons.rows for btn in row]
+    callbacks = [btn.callback_data for row in resp.buttons.rows for btn in row]
+    assert "opencode-go/deepseek-v4.1-flash" in labels
+    assert "openrouter/google/gemini-flash-image" in labels
+    assert "ms:m:pi/opencode-go/deepseek-v4.1-flash" in callbacks
+
+
+async def test_pi_browser_filters_and_shows_effort_step(orch: Orchestrator) -> None:
+    set_pi_models(
+        (
+            "pi/opencode-go/deepseek-v4.1-flash",
+            "pi/opencode-go/claude-haiku-5-5",
+        )
+    )
+    filtered = await show_provider_models(orch, SessionKey(chat_id=1), "pi", query="deepseek")
+    assert filtered.buttons is not None
+    labels = [btn.text for row in filtered.buttons.rows for btn in row]
+    assert "opencode-go/deepseek-v4.1-flash" in labels
+    assert "opencode-go/claude-haiku-5-5" not in labels
+
+    effort = await handle_model_callback(
+        orch,
+        SessionKey(chat_id=1),
+        "ms:m:pi/opencode-go/deepseek-v4.1-flash",
+    )
+    assert "Thinking level" in effort.text
+    effort_labels = [btn.text for row in effort.buttons.rows for btn in row]
+    assert "Max" in effort_labels
+
+
+async def test_pi_is_not_offered_when_unauthenticated(orch: Orchestrator) -> None:
+    with _patch_auth({"claude": _AUTHED_CLAUDE, "codex": _NOT_FOUND_CODEX, "pi": _NOT_FOUND_PI}):
+        resp = await model_selector_start(orch, SessionKey(chat_id=1))
+    assert resp.buttons is not None
+    labels = [btn.text for row in resp.buttons.rows for btn in row]
+    assert "PI" not in labels
+
+
+# -- model browser: pagination + filtering --
+
+
+def _many_codex_models(count: int) -> list[CodexModelInfo]:
+    return [
+        CodexModelInfo(
+            id=f"gpt-{index}",
+            display_name=f"GPT {index}",
+            description=f"Model number {index}",
+            supported_efforts=("low", "medium", "high"),
+            default_effort="medium",
+            is_default=index == 0,
+        )
+        for index in range(count)
+    ]
+
+
+async def test_browser_paginates_large_catalog(orch: Orchestrator) -> None:
+    with _with_codex_cache(orch, models=_many_codex_models(10)):
+        resp = await handle_model_callback(orch, SessionKey(chat_id=1), "ms:p:codex")
+
+    assert resp.buttons is not None
+    labels = [btn.text for row in resp.buttons.rows for btn in row]
+    callbacks = [btn.callback_data for row in resp.buttons.rows for btn in row]
+    assert "Page 1/2" in resp.text
+    assert "Next »" in labels
+    assert "« Prev" not in labels
+    assert "ms:g:1" in callbacks
+    # 8 models on page one, with no second-page model leaking in.
+    assert "GPT 7" in labels
+    assert "GPT 8" not in labels
+
+
+async def test_browser_next_page_preserves_query(orch: Orchestrator) -> None:
+    key = SessionKey(chat_id=1)
+    with _with_codex_cache(orch, models=_many_codex_models(10)):
+        first = await show_provider_models(orch, key, "codex", query="model")
+        second = await handle_model_callback(orch, key, "ms:g:1")
+
+    assert first.buttons is not None
+    assert second.buttons is not None
+    assert "Page 1/2" in first.text
+    assert "Page 2/2" in second.text
+    assert "Filter:" in second.text
+    second_labels = [btn.text for row in second.buttons.rows for btn in row]
+    assert "GPT 8" in second_labels
+    assert "« Prev" in second_labels
+
+
+async def test_browser_filters_by_keyword(orch: Orchestrator) -> None:
+    with _with_codex_cache(orch):
+        resp = await show_provider_models(orch, SessionKey(chat_id=1), "codex", query="mini")
+
+    assert resp.buttons is not None
+    labels = [btn.text for row in resp.buttons.rows for btn in row]
+    assert "gpt-5.1-codex-mini" in labels
+    assert "gpt-5.2-codex" not in labels
+    assert "Filter: `mini`" in resp.text
+    assert "Clear filter" in labels
+
+
+async def test_browser_no_match_offers_clear_and_back(orch: Orchestrator) -> None:
+    with _with_codex_cache(orch):
+        resp = await show_provider_models(orch, SessionKey(chat_id=1), "codex", query="zzz")
+
+    assert resp.buttons is not None
+    labels = [btn.text for row in resp.buttons.rows for btn in row]
+    assert "No CODEX models match" in resp.text
+    assert "Clear filter" in labels
+    assert "<< Back" in labels
+
+
+async def test_search_button_arms_next_message_as_filter(orch: Orchestrator) -> None:
+    key = SessionKey(chat_id=1)
+    with _with_codex_cache(orch):
+        prompt = await handle_model_callback(orch, key, "ms:s:codex")
+        assert prompt.buttons is not None
+        assert "Type a keyword" in prompt.text
+        assert orch._model_browser[key].awaiting_query is True
+
+        result = await orch.handle_message(key, "mini")
+
+    assert result.buttons is not None
+    labels = [btn.text for row in result.buttons.rows for btn in row]
+    assert "gpt-5.1-codex-mini" in labels
+    assert "gpt-5.2-codex" not in labels
+    assert orch._model_browser[key].awaiting_query is False
+
+
+async def test_pending_search_ignores_slash_commands(orch: Orchestrator) -> None:
+    key = SessionKey(chat_id=1)
+    with _with_codex_cache(orch):
+        await handle_model_callback(orch, key, "ms:s:codex")
+        resp = await consume_model_search(orch, key, "/status")
+
+    assert resp is None
+    assert orch._model_browser[key].awaiting_query is False
+
+
+async def test_pending_search_ignores_long_prompt(orch: Orchestrator) -> None:
+    key = SessionKey(chat_id=1)
+    with _with_codex_cache(orch):
+        await handle_model_callback(orch, key, "ms:s:codex")
+        resp = await consume_model_search(orch, key, "please refactor " * 20)
+
+    assert resp is None
+    assert orch._model_browser[key].awaiting_query is False
+
+
+async def test_browser_cancel_returns_to_providers(orch: Orchestrator) -> None:
+    with _patch_auth(
+        {"claude": _AUTHED_CLAUDE, "codex": _AUTHED_CODEX, "gemini": _NOT_FOUND_GEMINI}
+    ):
+        await handle_model_callback(orch, SessionKey(chat_id=1), "ms:s:codex")
+        resp = await handle_model_callback(orch, SessionKey(chat_id=1), "ms:c")
+
+    assert resp.buttons is not None
+    labels = [btn.text for row in resp.buttons.rows for btn in row]
+    assert "CLAUDE" in labels
+    assert "CODEX" in labels
 
 
 # -- handle_model_callback: model selection --

@@ -33,8 +33,9 @@ RUN apt-get update \
 # Allow pip installs without the "externally managed" guard
 RUN rm -f /usr/lib/python*/EXTERNALLY-MANAGED
 
-# Install Claude Code CLI and Codex CLI
+# Install Claude Code CLI, Codex CLI, Gemini CLI, and Pi
 RUN npm install -g @anthropic-ai/claude-code @openai/codex @google/gemini-cli
+RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent
 
 # Prepare a writable data directory
 RUN mkdir -p /data && chown node:node /data

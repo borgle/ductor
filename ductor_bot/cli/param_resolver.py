@@ -17,10 +17,12 @@ from ductor_bot.config import (
     CLAUDE_SUPPORTED_EFFORTS,
     GROK_MODELS,
     GROK_SUPPORTED_EFFORTS,
+    PI_SUPPORTED_EFFORTS,
     get_gemini_models,
+    get_pi_models,
 )
 
-_TASK_PROVIDERS: frozenset[str] = frozenset({"claude", "codex", "gemini", "grok"})
+_TASK_PROVIDERS: frozenset[str] = frozenset({"claude", "codex", "gemini", "grok", "pi"})
 
 
 def _looks_like_gemini_model(model: str) -> bool:
@@ -119,6 +121,10 @@ def _resolve_reasoning_effort(
         return _static_effort(
             requested_effort, GROK_SUPPORTED_EFFORTS, "Grok", model, explicit=explicit
         )
+    if provider == "pi":
+        return _static_effort(
+            requested_effort, PI_SUPPORTED_EFFORTS, "Pi", model, explicit=explicit
+        )
 
     if provider == "codex" and codex_cache:
         model_info = codex_cache.get_model(model)
@@ -189,6 +195,11 @@ def resolve_cli_config(
             msg = (
                 f"Invalid Grok model: {model}. Must be one of {sorted(known)} or a grok-* model ID"
             )
+            raise DuctorError(msg)
+    elif provider == "pi":
+        known_pi = get_pi_models()
+        if known_pi and model not in known_pi and f"pi/{model}" not in known_pi:
+            msg = f"Invalid Pi model: {model}"
             raise DuctorError(msg)
     else:  # codex
         if codex_cache is None:

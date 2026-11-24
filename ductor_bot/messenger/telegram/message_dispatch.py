@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ductor_bot.cli.coalescer import CoalesceConfig, StreamCoalescer
+from ductor_bot.messenger.telegram.callbacks import button_grid_to_markup
 from ductor_bot.messenger.telegram.sender import (
     SendRichOpts,
     send_files_from_text,
@@ -218,6 +219,7 @@ async def run_non_streaming_message(
             result.text,
             SendRichOpts(
                 reply_to_message_id=reply_id,
+                reply_markup=button_grid_to_markup(result.buttons),
                 allowed_roots=dispatch.allowed_roots,
                 thread_id=dispatch.thread_id,
             ),
@@ -374,6 +376,7 @@ async def run_streaming_message(  # noqa: C901, PLR0915
                 result.text,
                 SendRichOpts(
                     reply_to_message_id=dispatch.message.message_id,
+                    reply_markup=button_grid_to_markup(result.buttons),
                     allowed_roots=dispatch.allowed_roots,
                     thread_id=dispatch.thread_id,
                 ),

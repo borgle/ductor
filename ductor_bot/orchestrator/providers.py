@@ -16,9 +16,12 @@ from ductor_bot.config import (
     get_gemini_models,
     get_grok_models,
     get_grok_models_ordered,
+    get_pi_models,
+    get_pi_models_ordered,
     set_antigravity_models,
     set_gemini_models,
     set_grok_models,
+    set_pi_models,
 )
 
 if TYPE_CHECKING:
@@ -84,6 +87,8 @@ class ProviderManager:
             return "Antigravity"
         if provider == "grok":
             return "Grok Build"
+        if provider == "pi":
+            return "Pi"
         return "Codex"
 
     # -- Auth / init ----------------------------------------------------------
@@ -140,6 +145,11 @@ class ProviderManager:
         set_grok_models(models)
         self.refresh_known_model_ids()
 
+    def on_pi_models_refresh(self, models: tuple[str, ...]) -> None:
+        """Callback for PiCacheObserver: update model registry."""
+        set_pi_models(models)
+        self.refresh_known_model_ids()
+
     def refresh_gemini_api_key_mode(self) -> bool:
         """Re-read ``~/.gemini/settings.json`` and update the cache.
 
@@ -161,6 +171,7 @@ class ProviderManager:
             | get_gemini_models()
             | get_antigravity_models()
             | get_grok_models()
+            | get_pi_models()
         )
 
     def resolve_runtime_target(self, requested_model: str | None = None) -> tuple[str, str]:
@@ -175,7 +186,7 @@ class ProviderManager:
         codex = self._codex_cache_fn() if self._codex_cache_fn else None
         return bool(codex and codex.validate_model(candidate))
 
-    def default_model_for_provider(self, provider: str) -> str:
+    def default_model_for_provider(self, provider: str) -> str:  # noqa: PLR0911
         """Return the default model ID for a provider, or empty string if unknown."""
         if provider == "claude":
             return self._config.model if self._config.provider == "claude" else "sonnet"
@@ -188,6 +199,11 @@ class ProviderManager:
                     if m.is_default:
                         return m.id
             return ""
+        if provider == "pi":
+            if self._config.provider == "pi":
+                return self._config.model
+            ordered = get_pi_models_ordered()
+            return ordered[0] if ordered else ""
         # gemini has no static default; unknown providers fall through to "".
         return {"antigravity": "antigravity-default"}.get(provider, "")
 
@@ -199,7 +215,7 @@ class ProviderManager:
         - known model   (``@opus``)  -> (inferred_provider, model)
         - unknown                    -> None
         """
-        if key in ("claude", "codex", "gemini", "antigravity", "grok"):
+        if key in ("claude", "codex", "gemini", "antigravity", "grok", "pi"):
             return key, self.default_model_for_provider(key)
         if self.is_known_model(key):
             provider = self._models.provider_for(key)
@@ -222,6 +238,7 @@ class ProviderManager:
             "codex": ("Codex", "#10B981"),
             "antigravity": ("Antigravity", "#3B82F6"),
             "grok": ("Grok Build", "#111827"),
+            "pi": ("Pi", "#F59E0B"),
         }
         providers: list[dict[str, object]] = []
         for pid in sorted(self._available_providers):
@@ -240,6 +257,8 @@ class ProviderManager:
                 models = sorted(antigravity) if antigravity else sorted(ANTIGRAVITY_MODELS)
             elif pid == "grok":
                 models = list(get_grok_models_ordered())
+            elif pid == "pi":
+                models = list(get_pi_models_ordered())
             else:
                 models = []
             providers.append({"id": pid, "name": name, "color": color, "models": models})

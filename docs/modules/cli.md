@@ -1,12 +1,12 @@
 # cli/
 
-Provider-agnostic CLI execution layer for Claude Code, Codex, Gemini, Antigravity, and Grok Build.
+Provider-agnostic CLI execution layer for Claude Code, Codex, Gemini, Antigravity, Grok Build, and Pi.
 
 ## Files
 
 - `types.py`: `AgentRequest`, `AgentResponse`, `CLIResponse`
 - `base.py`: `BaseCLI`, `CLIConfig`, `docker_wrap()`, Windows helpers
-- `factory.py`: provider factory (`claude` / `codex` / `gemini` / `antigravity` / `grok`)
+- `factory.py`: provider factory (`claude` / `codex` / `gemini` / `antigravity` / `grok` / `pi`)
 - `service.py`: `CLIService` gateway for orchestrator
 - `init_wizard.py`: interactive onboarding and smart reset flow
 - `executor.py`: shared subprocess lifecycle helpers for provider wrappers
@@ -17,6 +17,10 @@ Provider-agnostic CLI execution layer for Claude Code, Codex, Gemini, Antigravit
 - `gemini_provider.py`: Gemini subprocess wrapper
 - `antigravity_provider.py`: Antigravity (`agy`) subprocess wrapper — always runs on the host, even with the Docker sandbox enabled (the sandbox image ships no `agy` binary or auth state). `agy` has no headless streaming mode (`--print` is one-shot; `--prompt-interactive` needs a TTY), so `send_streaming` reuses the `--print` path. Because `agy --print` silently drops stdout in non-TTY subprocesses (upstream bug `google-antigravity/antigravity-cli#76`), the answer is read back from agy's own transcript (`<home>/.gemini/antigravity-cli/brain/<conv-id>/.system_generated/logs/transcript.jsonl`, the final `PLANNER_RESPONSE` entry — clean, without tool-call narration), with stdout as fallback. `--print <prompt>` is placed last and adjacent (it consumes the next token as its prompt value), and agy is grounded in the per-agent workspace via `--add-dir`
 - `grok_provider.py`: Grok Build (`grok`) headless wrapper — oneshot `--output-format json`, streaming `streaming-json`, session `--resume`/`--continue`, long prompts via `--prompt-file`, tool filter via `--tools`/`--disallowed-tools`
+- `pi_provider.py`: Pi coding-agent (`pi`) wrapper — `--print --mode json`, prompt via stdin, `--provider`/`--model`, `--thinking`, `--session-id`/`--continue`, `--system-prompt`/`--append-system-prompt`, `--tools`/`--exclude-tools`
+- `pi_events.py`: Pi JSONL parser (session, message_update deltas, message_end, tool execution, compaction)
+- `pi_discovery.py`: Pi catalog discovery via `pi --offline --list-models`
+- `pi_cache.py` / `pi_cache_observer.py`: persistent Pi catalog cache and hourly refresh
 - `stream_events.py`: normalized stream events + Claude stream parser
 - `codex_events.py`: Codex JSONL parser
 - `gemini_events.py`: Gemini NDJSON + JSON parser
@@ -79,13 +83,14 @@ Used by cron and webhook `cron_task` runs.
 
 - input: `TaskOverrides(provider, model, reasoning_effort, cli_parameters)`
 - output: immutable `TaskExecutionConfig`
-- supported one-shot providers: `claude`, `codex`, `gemini`, `grok`
+- supported one-shot providers: `claude`, `codex`, `gemini`, `grok`, `pi`
 - validation:
   - Claude model in `CLAUDE_MODELS`
   - Codex model validated against `CodexModelCache`
   - Gemini model validated against aliases/discovered IDs or `gemini-*` patterns
   - Grok model in `GROK_MODELS` or `grok-*` prefix
-- Codex / Claude / Grok reasoning effort applied only when supported by model
+  - Pi model in the discovered Pi catalog (`pi/<provider>/<model>` or `<provider>/<model>`)
+- Codex / Claude / Grok / Pi reasoning effort applied only when supported by model
 - task `cli_parameters` are appended after the global provider-specific args
 
 ## Streaming model
@@ -171,6 +176,18 @@ Recovery triggers handled in orchestrator flows:
   fallback `grok-4.5` / `grok-composer-2.5-fast`; any `grok-*` ID still routes
 - efforts: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`
 
+### Pi
+
+- binary `pi` (install: `npm install -g --ignore-scripts @earendil-works/pi-coding-agent`)
+- non-interactive JSON mode: `--print --mode json`, prompt fed through stdin
+- models: `pi --offline --list-models` → `pi_models.json` (hourly refresh); IDs stored as `pi/<pi-provider>/<model>` so they never collide with native providers
+- model/effort: `--provider <p> --model <m>` plus `--thinking` (ductor `none` → Pi `off`)
+- sessions: `--session-id <id>` (create-or-resume) / `--continue`
+- system prompt: `--system-prompt` / `--append-system-prompt`; tools: `--tools` / `--exclude-tools`
+- project trust: `--approve` when `permission_mode=bypassPermissions`
+- stream: `message_update.text_delta` → text, `thinking_delta` → thinking, `tool_execution_start` → tool, `compaction_start/end` → status; final `message_end`/`turn_end` supply authoritative text, usage, and cost
+- auth: `~/.pi/agent/auth.json` (or `PI_CODING_AGENT_DIR`) and common Pi provider API-key env vars
+
 ## Auth detection (`auth.py`)
 
 Statuses: `AUTHENTICATED`, `INSTALLED`, `NOT_FOUND`.
@@ -186,6 +203,7 @@ Statuses: `AUTHENTICATED`, `INSTALLED`, `NOT_FOUND`.
   - `settings.json` selected auth mode
   - optional fallback to `~/.ductor/config/config.json` `gemini_api_key`
 - Grok: `~/.grok/auth.json`, then `XAI_API_KEY`, then `grok models` probe; install markers: binary or `config.toml`
+- Pi: `$PI_CODING_AGENT_DIR/auth.json` (default `~/.pi/agent/auth.json`), then common Pi provider API-key env vars; binary presence marks `INSTALLED`
 
 ## Model caches
 
@@ -204,6 +222,14 @@ Each provider's cache observer is created only when the startup auth detection r
 - loaded on startup (uses cache when fresh, refreshes when stale/missing)
 - hourly refresh loop
 - refresh callback updates runtime Gemini model registry (`set_gemini_models`)
+
+### Pi cache
+
+- file: `~/.ductor/config/pi_models.json`
+- discovery source: `discover_pi_models()` (`pi_discovery.py`) via `pi --offline --list-models`
+- loaded on startup with force refresh
+- hourly refresh loop
+- refresh callback updates the runtime Pi model registry (`set_pi_models`)
 
 ### Antigravity cache
 

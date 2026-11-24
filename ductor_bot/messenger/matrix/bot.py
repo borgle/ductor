@@ -790,6 +790,9 @@ class MatrixBot:
                 on_system_status=editor.on_system,
             )
         self._maybe_append_footer(result)
+        if result.buttons:
+            await self._send_selector_response(room_id, result.text, result.buttons)
+            return
         await editor.finalize(result.text)
 
     async def _run_non_streaming(
@@ -804,7 +807,9 @@ class MatrixBot:
             result = await orch.handle_message(key, text)
 
         self._maybe_append_footer(result)
-        if result.text:
+        if result.buttons:
+            await self._send_selector_response(room_id, result.text, result.buttons)
+        elif result.text:
             formatted = self._button_tracker.extract_and_format(room_id, result.text)
             await self._send_rich(room_id, formatted)
 

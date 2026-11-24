@@ -32,6 +32,11 @@ def create_cli(config: CLIConfig) -> BaseCLI:
 
         return GrokCLI(config)
 
+    if config.provider == "pi":
+        from ductor_bot.cli.pi_provider import PiCLI
+
+        return PiCLI(config)
+
     from ductor_bot.cli.claude_provider import ClaudeCodeCLI
 
     return ClaudeCodeCLI(config)

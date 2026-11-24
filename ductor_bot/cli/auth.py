@@ -517,12 +517,92 @@ def _grok_cli_logged_in(binary: str) -> bool:
     return proc.returncode == 0 and bool(proc.stdout.strip())
 
 
+_PI_ENV_KEYS = frozenset(
+    {
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
+        "ANTHROPIC_OAUTH_TOKEN",
+        "OPENAI_API_KEY",
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+        "GOOGLE_CLOUD_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "OPENROUTER_API_KEY",
+        "GROQ_API_KEY",
+        "XAI_API_KEY",
+        "MISTRAL_API_KEY",
+        "CEREBRAS_API_KEY",
+        "NVIDIA_API_KEY",
+        "AI_GATEWAY_API_KEY",
+        "OPENCODE_API_KEY",
+        "ZAI_API_KEY",
+        "KIMI_API_KEY",
+        "MOONSHOT_API_KEY",
+        "MINIMAX_API_KEY",
+        "AZURE_OPENAI_API_KEY",
+        "RADIUS_API_KEY",
+        "HF_TOKEN",
+        "FIREWORKS_API_KEY",
+        "TOGETHER_API_KEY",
+        "TYPESAFE_API_KEY",
+    }
+)
+
+
+def _pi_agent_dir() -> Path:
+    configured = os.environ.get("PI_CODING_AGENT_DIR", "").strip()
+    if configured:
+        return Path(configured).expanduser()
+    return Path.home() / ".pi" / "agent"
+
+
+def _pi_auth_file_has_credentials(path: Path) -> bool:
+    if not _is_nonempty_file(path):
+        return False
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return False
+    return isinstance(data, dict) and bool(data)
+
+
+def check_pi_auth() -> AuthResult:
+    """Check Pi CLI auth via ``auth.json`` provider entries or common env keys."""
+    binary = shutil.which("pi")
+    if binary is None:
+        logger.debug("Auth check provider=pi status=NOT_FOUND")
+        return AuthResult("pi", AuthStatus.NOT_FOUND)
+
+    agent_dir = _pi_agent_dir()
+    auth_file = agent_dir / "auth.json"
+    if _pi_auth_file_has_credentials(auth_file):
+        mtime = datetime.fromtimestamp(auth_file.stat().st_mtime, tz=UTC)
+        result = AuthResult("pi", AuthStatus.AUTHENTICATED, auth_file, mtime)
+        logger.debug("Auth check provider=%s status=%s", result.provider, result.status)
+        return result
+
+    if any(_has_nonempty_env(key) for key in _PI_ENV_KEYS):
+        result = AuthResult("pi", AuthStatus.AUTHENTICATED)
+        logger.debug("Auth check provider=%s status=%s (env key)", result.provider, result.status)
+        return result
+
+    if agent_dir.is_dir():
+        result = AuthResult("pi", AuthStatus.INSTALLED)
+        logger.debug("Auth check provider=%s status=%s", result.provider, result.status)
+        return result
+
+    result = AuthResult("pi", AuthStatus.INSTALLED)
+    logger.debug("Auth check provider=%s status=%s", result.provider, result.status)
+    return result
+
+
 _CHECKERS: dict[str, Callable[[], AuthResult]] = {
     "claude": check_claude_auth,
     "codex": check_codex_auth,
     "gemini": check_gemini_auth,
     "antigravity": check_antigravity_auth,
     "grok": check_grok_auth,
+    "pi": check_pi_auth,
 }
 
 

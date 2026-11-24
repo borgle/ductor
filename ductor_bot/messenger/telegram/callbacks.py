@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
 def button_grid_to_markup(grid: ButtonGrid | None) -> InlineKeyboardMarkup | None:
     """Convert abstract ``ButtonGrid`` to aiogram ``InlineKeyboardMarkup``."""
-    if grid is None:
+    if not isinstance(grid, ButtonGrid) or not grid.rows:
         return None
     from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 

@@ -26,3 +26,18 @@ class SelectorResponse:
 
     text: str
     buttons: ButtonGrid | None = None
+
+
+@dataclass(slots=True)
+class ModelBrowserState:
+    """Ephemeral per-session state for the paginated model browser.
+
+    Kept on the orchestrator so concurrent chats/topics never share a page or
+    a pending filter prompt. Purely UI state: it is never persisted.
+    """
+
+    provider: str
+    query: str = ""
+    page: int = 0
+    awaiting_query: bool = False
+    updated_at: float = 0.0

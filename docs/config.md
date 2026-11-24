@@ -184,6 +184,7 @@ Notes:
 | `gemini` | `list[str]` | `[]` | Extra args appended to Gemini CLI command |
 | `antigravity` | `list[str]` | `[]` | Extra args appended to Antigravity (`agy`) CLI command |
 | `grok` | `list[str]` | `[]` | Extra args appended to Grok Build (`grok`) CLI command |
+| `pi` | `list[str]` | `[]` | Extra args appended to the Pi coding-agent (`pi`) CLI command |
 
 Used by `CLIServiceConfig` for main-chat calls.
 
@@ -569,6 +570,7 @@ Runtime note (`Orchestrator._start_api_server` + `ApiServer._authenticate`):
 | `codex` | `bool` | `true` | Include `~/.codex/skills` (or `$CODEX_HOME/skills`) in cross-tool sync |
 | `gemini` | `bool` | `true` | Include `~/.gemini/skills` in cross-tool sync |
 | `grok` | `bool` | `true` | Include `~/.grok/skills` in cross-tool sync |
+| `pi` | `bool` | `true` | Include `~/.pi/agent/skills` (or `$PI_CODING_AGENT_DIR/skills`) in cross-tool sync |
 
 Toggles are read live from `config.json` on each skill-sync tick (independent of `ConfigReloader`), so changes take effect within one sync interval without restart. A disabled provider is dropped from the sync, so its skill dir is neither linked into nor used as a source; existing ductor-created links are not actively removed (cleared on shutdown cleanup or manually).
 
@@ -618,11 +620,14 @@ Restart classification is computed from `AgentConfig` top-level schema fields.
   because `agy` model selection is not reliable there; discovered display names
   are still known to directives and API provider metadata.
 - Grok Build models have a hardcoded fallback list (`grok-4.5`, `grok-composer-2.5-fast`) and refresh from `grok models` at startup (discovery order preserved). The Telegram `/model` selector shows the discovery-ordered IDs via `get_grok_models_ordered()`.
+- Pi models are discovered from `pi --offline --list-models` and stored as `pi/<pi-provider>/<model>` (for example `pi/opencode-go/deepseek-v4.1-flash`). The `/model` PI entry lists all authenticated Pi providers; labels omit the `pi/` prefix. Credentials come from `~/.pi/agent/auth.json` or Pi provider environment variables.
+- `/model` is a provider-first browser: the model list is paginated, and search matches IDs, display names, and descriptions. Use the `Search` button (type the keyword in the next message) or `/model <provider> <keyword>` directly.
 - Provider resolution (`provider_for(model_id)`):
   - Claude when in `CLAUDE_MODELS` or when model looks like `claude-*`,
   - Gemini when in aliases/discovered set or when model looks like `gemini-*`/`auto-gemini-*`,
   - Antigravity when in the built-in/discovered set or when model looks like `antigravity-*`,
   - Grok when in `GROK_MODELS`/discovered set or when model looks like `grok-*`,
+  - Pi when the ID starts with `pi/` or matches a discovered `<pi-provider>/<model>` ID,
   - otherwise Codex.
 
 ## Timezone Resolution
@@ -640,7 +645,7 @@ Returns `ZoneInfo` when available, otherwise a UTC tzinfo fallback object with `
 
 ## `reasoning_effort`
 
-UI values: `low`, `medium`, `high`, `xhigh` (Codex and Claude); Claude additionally supports `max`. Grok Build accepts a wider headless set (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`) applied via `--reasoning-effort`.
+UI values: `low`, `medium`, `high`, `xhigh` (Codex and Claude); Claude additionally supports `max`. Grok Build accepts a wider headless set (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`) applied via `--reasoning-effort`. Pi accepts the same wide set and maps ductor `none` to Pi `off` via `--thinking`.
 
 Effort is resolved **per session**: each forum topic can run at its own effort
 (`/effort` or the `/model` thinking-level step), the main chat / DM sets the
@@ -703,7 +708,7 @@ Behavior:
 
 ## Model-cache observer gating
 
-The Gemini, Antigravity, Grok, and Codex cache observers are only created for providers found by the startup auth detection (`installed_providers`), which is fallback-aware (e.g. finds a Gemini CLI under NVM that a plain PATH lookup would miss). A provider whose CLI is not detected gets no cache observer at all.
+The Gemini, Antigravity, Grok, Pi, and Codex cache observers are only created for providers found by the startup auth detection (`installed_providers`), which is fallback-aware (e.g. finds a Gemini CLI under NVM that a plain PATH lookup would miss). A provider whose CLI is not detected gets no cache observer at all.
 
 ## `agents.json` (Multi-Agent Registry)
 

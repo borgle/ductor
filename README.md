@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Claude Code, Codex CLI, Gemini CLI, Antigravity CLI, and Grok Build as your coding assistant — on Telegram, Matrix, and Slack.</strong><br>
+  <strong>Claude Code, Codex CLI, Gemini CLI, Antigravity CLI, Grok Build, and Pi as your coding assistant — on Telegram, Matrix, and Slack.</strong><br>
   Uses only official CLIs. Nothing spoofed, nothing proxied. Multi-transport, automation, and sub-agents in one runtime.
 </p>
 
@@ -23,7 +23,7 @@
 
 ---
 
-If you want to control Claude Code, Google's Gemini CLI, OpenAI's Codex CLI, Antigravity CLI, or xAI Grok Build via Telegram, Matrix, or Slack, build automations, or manage multiple agents easily — ductor is the right tool for you. The messaging layer is modular: Telegram, Matrix, and Slack ship today, and new transports plug into the same transport-agnostic core.
+If you want to control Claude Code, Google's Gemini CLI, OpenAI's Codex CLI, Antigravity CLI, xAI Grok Build, or the Pi coding agent via Telegram, Matrix, or Slack, build automations, or manage multiple agents easily — ductor is the right tool for you. The messaging layer is modular: Telegram, Matrix, and Slack ship today, and new transports plug into the same transport-agnostic core.
 
 ductor runs on your machine and sends simple console commands as if you were typing them yourself, so you can use your active subscriptions (Claude Max, Google AI Ultra, etc.) directly. No API proxying, no SDK patching, no spoofed headers. Just the official CLIs, executed as subprocesses, with all state kept in plain JSON and Markdown under `~/.ductor/`.
 
@@ -41,7 +41,7 @@ ductor
 
 The onboarding wizard handles CLI checks, transport setup, timezone, optional Docker, and optional background service install.
 
-**Requirements:** Python 3.11+, at least one CLI installed (`claude`, `codex`, `gemini`, `agy`, or `grok`), and either:
+**Requirements:** Python 3.11+, at least one CLI installed (`claude`, `codex`, `gemini`, `agy`, `grok`, or `pi`), and either:
 
 - a Telegram Bot Token from [@BotFather](https://t.me/BotFather), or
 - a Matrix account on a homeserver (homeserver URL, user ID, password/access token), or
@@ -58,14 +58,17 @@ ductor gives you multiple ways to interact with your coding agents. Each level b
 
 ### 1. Single chat (your main agent)
 
-This is where everyone starts. You get a private 1:1 chat with your bot (Telegram or Matrix). Every message goes to the CLI you have active (`claude`, `codex`, `gemini`, `agy`, or `grok`), responses stream back in real time.
+This is where everyone starts. You get a private 1:1 chat with your bot (Telegram or Matrix). Every message goes to the CLI you have active (`claude`, `codex`, `gemini`, `agy`, `grok`, or `pi`), responses stream back in real time.
 
 ```text
 You:   "Explain the auth flow in this codebase"
 Bot:   [streams response from Claude Code]
 
 You:   /model
-Bot:   [interactive model/provider picker]
+Bot:   [provider picker → paginated model list → Search]
+
+You:   /model codex mini
+Bot:   [filtered Codex models without scrolling the full list]
 
 You:   "Now refactor the parser"
 Bot:   [streams response, same session context]
@@ -198,7 +201,7 @@ Main chat:  "Ask codex-agent to write tests for the API"
 - **Real-time streaming** — live message edits (Telegram) or segment-based output (Matrix)
 - **Telegram reasoning + tool UX controls** — optional reasoning stream, live tool progress, and separate thinking indicator controls
 - **Quoted-reply context** — replying to a message (Telegram) carries the cited text into the agent prompt, so follow-ups like "expand on this" keep their reference
-- **Five coding agents** — Claude Code, Codex CLI, Gemini CLI (API key / Code Assist license; Google ended free individual-account access on 2026-06-18), Antigravity (`agy`), and Grok Build (`grok`), switchable per chat/topic with `/model` (never blocks, even during active processes)
+- **Six coding agents** — Claude Code, Codex CLI, Gemini CLI (API key / Code Assist license; Google ended free individual-account access on 2026-06-18), Antigravity (`agy`), Grok Build (`grok`), and Pi (multi-provider), switchable per chat/topic with `/model` (never blocks, even during active processes)
 - **Per-topic project roots** — map a forum topic to its own working directory (`project_roots`) so the agent runs inside that repo instead of the shared workspace
 - **Persistent memory** — plain Markdown files that survive across sessions
 - **Memory maintenance** — pre-compaction flush, optional reflection cadence, and LLM-driven compaction
@@ -213,7 +216,7 @@ Main chat:  "Ask codex-agent to write tests for the API"
 - **Config hot-reload** — most settings update without restart (including language, scene, image)
 - **Docker sandbox** — optional sidecar container with configurable host mounts
 - **Service manager** — Linux (systemd), macOS (launchd), Windows (Task Scheduler)
-- **Cross-tool skill sync** — shared skills across `~/.claude/`, `~/.codex/`, `~/.gemini/`, `~/.grok/` (globally or per-provider toggleable)
+- **Cross-tool skill sync** — shared skills across `~/.claude/`, `~/.codex/`, `~/.gemini/`, `~/.grok/`, and `~/.pi/agent/` (globally or per-provider toggleable)
 
 ## Messenger support
 
@@ -373,7 +376,7 @@ This is **hot-reloadable** — change the language without restarting the bot.
 
 | Command | Description |
 |---|---|
-| `/model` | Interactive model/provider selector |
+| `/model` | Provider-first model picker with pagination and search (`/model codex gpt`) |
 | `/effort` | Reasoning effort for the current chat/topic (Claude & Codex) |
 | `/new` | Reset the configured default-provider session for this chat/topic |
 | `/reset` | Reset the currently active provider session for this chat/topic |
@@ -482,7 +485,7 @@ Full config reference: [`docs/config.md`](docs/config.md) — full example with 
 
 Other projects manipulate SDKs or patch CLIs and risk violating provider terms of service. ductor simply runs the official CLI binaries as subprocesses — nothing more.
 
-- Official CLIs only (`claude`, `codex`, `gemini`, `agy`, `grok`)
+- Official CLIs only (`claude`, `codex`, `gemini`, `agy`, `grok`, `pi`)
 - Rule files are plain Markdown (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md` — `AGENTS.md` is shared by Codex and Grok)
 - Memory is one Markdown file per agent
 - All state is JSON — no database, no external services

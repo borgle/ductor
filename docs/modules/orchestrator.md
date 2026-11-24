@@ -100,7 +100,7 @@ Responsibilities:
 
 Directive resolution supports:
 
-- provider directives (`@codex`, `@gemini`, `@claude`, `@antigravity`, `@grok`)
+- provider directives (`@codex`, `@gemini`, `@claude`, `@antigravity`, `@grok`, `@pi`)
 - model directives (`@opus`, `@flash`, cache-backed IDs)
 
 ## Selector subsystem (`orchestrator/selectors/`)
@@ -115,10 +115,18 @@ Modules:
 - `task_selector.py` (`tsc:*`)
 - shared models/utilities in `selectors/models.py`, `selectors/utils.py`
 
+Model picker flow:
+
+1. `/model` lists authenticated providers.
+2. Choosing a provider opens its model catalog with `Prev`/`Next` pagination (8 per page on Telegram, 5 on Matrix to stay within reaction-button limits).
+3. `Search` arms the next plain message as a case-insensitive filter over model IDs, display names, and descriptions. `/model <provider> <keyword>` performs the same filter directly, and `Clear filter` restores the full list.
+4. Choosing a model keeps the existing reasoning-effort step and session-switch semantics.
+
 Important model-selector behavior:
 
 - topic-scoped `/model` changes only the active topic session
 - non-topic `/model` updates config defaults (and sub-agent `agents.json` when relevant)
+- `/model <provider>` opens a browser; any other `/model <arg>` is still treated as a direct model switch
 
 ## Flow behavior (`flows.py`)
 

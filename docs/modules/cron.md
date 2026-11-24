@@ -107,6 +107,7 @@ Supported providers:
 - Codex
 - Gemini
 - Grok Build
+- Pi
 
 Antigravity is not supported in the cron one-shot command builder. Use a supported provider override for cron jobs when the global chat provider is `antigravity`.
 
@@ -116,12 +117,14 @@ Examples:
 - Codex: `codex exec --json ... -- <prompt>`
 - Gemini: `gemini -p "" --output-format json --include-directories . ...` (prompt passed via stdin)
 - Grok: `grok --output-format json --model <id> --permission-mode <mode> ... -p <prompt>` (prompts over ~24k chars use `--prompt-file`)
+- Pi: `pi --print --mode json --provider <p> --model <m> ...` (prompt passed via stdin)
 
 `bypassPermissions` behavior:
 
 - Codex: `--dangerously-bypass-approvals-and-sandbox`
 - Gemini: `--approval-mode yolo`
 - Grok: `--always-approve` (alongside `--permission-mode`)
+- Pi: `--approve`
 
 ## Status values
 

@@ -59,7 +59,7 @@ Restart code: `42` (`EXIT_RESTART`).
 - container (re)start
 - mounts:
   - `~/.ductor -> /ductor`
-  - provider homes (`~/.claude`, `~/.codex`, `~/.gemini`, `~/.claude.json` when present)
+  - provider homes (`~/.claude`, `~/.codex`, `~/.gemini`, `~/.pi`, `~/.claude.json` when present)
   - optional host cache mount
   - user-configured `docker.mounts` to `/mnt/<name>`
 

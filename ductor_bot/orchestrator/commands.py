@@ -13,8 +13,10 @@ from ductor_bot.infra.version import check_pypi, get_current_version
 from ductor_bot.orchestrator.registry import OrchestratorResult
 from ductor_bot.orchestrator.selectors.cron_selector import cron_selector_start
 from ductor_bot.orchestrator.selectors.model_selector import (
+    PROVIDERS,
     effort_selector_start,
     model_selector_start,
+    show_provider_models,
     switch_model,
 )
 from ductor_bot.orchestrator.selectors.models import Button, ButtonGrid
@@ -56,14 +58,30 @@ async def cmd_status(orch: Orchestrator, key: SessionKey, _text: str) -> Orchest
 
 
 async def cmd_model(orch: Orchestrator, key: SessionKey, text: str) -> OrchestratorResult:
-    """Handle /model [name]."""
+    """Handle ``/model [provider] [keyword|model]``.
+
+    ``/model`` opens the provider picker. ``/model <provider>`` opens that
+    provider's paginated model browser, and ``/model <provider> <keyword>``
+    filters it. Any other single argument is still treated as a model ID so
+    ``/model sonnet`` and arbitrary custom IDs keep working.
+    """
     logger.info("Model requested")
     parts = text.split(None, 1)
-    if len(parts) < 2:
+    if len(parts) < 2 or not parts[1].strip():
         resp = await model_selector_start(orch, key)
         return OrchestratorResult(text=resp.text, buttons=resp.buttons)
-    name = parts[1].strip()
-    result_text = await switch_model(orch, key, name)
+
+    argument = parts[1].strip()
+    provider, _, query = argument.partition(" ")
+    provider = provider.casefold()
+    if provider in PROVIDERS:
+        resp = await show_provider_models(orch, key, provider, query=query.strip())
+        return OrchestratorResult(text=resp.text, buttons=resp.buttons)
+
+    # Not a provider: keep the historical behavior and treat the whole
+    # argument as a model ID (including custom IDs that happen to contain
+    # spaces).
+    result_text = await switch_model(orch, key, argument)
     return OrchestratorResult(text=result_text)
 
 
@@ -310,7 +328,7 @@ def _status_effort_suffix(orch: Orchestrator, model_name: str, effort: str) -> s
     global default) so /status reflects what the next turn actually uses.
     """
     provider = orch.models.provider_for(model_name)
-    if provider in ("codex", "claude", "grok") and effort and effort != "default":
+    if provider in ("codex", "claude", "grok", "pi") and effort and effort != "default":
         return f"\n{t('status.effort_line', effort=effort)}"
     return ""
 
