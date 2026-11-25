@@ -669,6 +669,7 @@ Behavior:
 - startup load is forced refresh (`force_refresh=True`),
 - checked hourly in background,
 - `load_or_refresh()` uses cache if `<24h` old, otherwise re-discovers via Codex app server,
+- if the app-server returns no models, discovery falls back to the active provider's `model_catalog_url` from `~/.codex/config.toml` (supports custom OpenAI-compatible providers),
 - consumed by `/model` wizard, `resolve_cli_config()` for cron/webhook validation, and `/diagnose` output.
 
 ## Gemini Model Cache

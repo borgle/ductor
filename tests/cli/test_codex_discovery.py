@@ -4,11 +4,18 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ductor_bot.cli.codex_discovery import CodexModelInfo, discover_codex_models
+from ductor_bot.cli import codex_discovery
+from ductor_bot.cli.codex_discovery import (
+    CodexModelInfo,
+    _CodexCatalogConfig,
+    _parse_catalog,
+    discover_codex_models,
+)
 
 _INIT_RESPONSE = json.dumps(
     {
@@ -53,6 +60,16 @@ _MODEL_LIST_RESPONSE = json.dumps(
 )
 
 _STDOUT = f"{_INIT_RESPONSE}\n{_MODEL_LIST_RESPONSE}\n"
+
+
+@pytest.fixture(autouse=True)
+def _disable_catalog_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep unit tests hermetic: no real ~/.codex/config.toml or HTTP fetch."""
+    monkeypatch.setattr(
+        codex_discovery,
+        "_discover_catalog_models",
+        AsyncMock(return_value=[]),
+    )
 
 
 def _mock_process(stdout: str = _STDOUT, returncode: int = 0) -> AsyncMock:
@@ -136,6 +153,89 @@ async def test_discover_models_spawn_error() -> None:
     ):
         models = await discover_codex_models()
     assert models == []
+
+
+def test_parse_catalog_shapes() -> None:
+    data = {
+        "models": [
+            {
+                "slug": "deepseek-flash",
+                "display_name": "DeepSeek-V4.1-Flash",
+                "description": "Fast",
+                "visibility": "list",
+                "supported_reasoning_levels": [
+                    {"effort": "low", "description": "Fast"},
+                    {"effort": "high", "description": "Deep"},
+                ],
+                "default_reasoning_level": "high",
+            },
+            {
+                "slug": "hidden-model",
+                "display_name": "Hidden",
+                "visibility": "hide",
+            },
+            {
+                "slug": "deepseek-v4-pro",
+                "display_name": "DeepSeek-V4-Pro",
+                "supported_reasoning_levels": [{"effort": "low"}],
+            },
+        ]
+    }
+    models = _parse_catalog(data, default_model="deepseek-flash")
+    assert [model.id for model in models] == ["deepseek-flash", "deepseek-v4-pro"]
+    assert models[0].is_default is True
+    assert models[0].supported_efforts == ("low", "high")
+    assert models[0].default_effort == "high"
+    assert models[1].is_default is False
+
+
+def test_load_catalog_config_reads_active_provider(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    codex_home = tmp_path / "codex"
+    codex_home.mkdir()
+    (codex_home / "config.toml").write_text(
+        """model = "deepseek-flash"
+model_provider = "deepseek"
+
+[model_providers.deepseek]
+model_catalog_url = "http://127.0.0.1:8787/deepseek/v1/models"
+experimental_bearer_token = "secret-token"
+"""
+    )
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    config = codex_discovery._load_codex_catalog_config()
+    assert config == _CodexCatalogConfig(
+        model="deepseek-flash",
+        catalog_url="http://127.0.0.1:8787/deepseek/v1/models",
+        token="secret-token",
+    )
+
+
+async def test_discover_models_falls_back_to_catalog() -> None:
+    proc = _mock_process(stdout="not json at all\n")
+    catalog_models = [
+        CodexModelInfo(
+            id="deepseek-flash",
+            display_name="DeepSeek-V4.1-Flash",
+            description="Fast",
+            supported_efforts=("low", "high"),
+            default_effort="high",
+            is_default=True,
+        )
+    ]
+    with (
+        patch("ductor_bot.cli.codex_discovery.which", return_value="/usr/bin/codex"),
+        patch("asyncio.create_subprocess_exec", return_value=proc),
+        patch(
+            "ductor_bot.cli.codex_discovery._discover_catalog_models",
+            AsyncMock(return_value=catalog_models),
+        ) as catalog_mock,
+    ):
+        models = await discover_codex_models()
+
+    catalog_mock.assert_awaited_once()
+    assert models == catalog_models
 
 
 async def test_codex_model_info_is_frozen() -> None:
