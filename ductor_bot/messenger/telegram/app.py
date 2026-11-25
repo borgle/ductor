@@ -68,6 +68,7 @@ from ductor_bot.messenger.telegram.middleware import (
     AuthMiddleware,
     SequentialMiddleware,
 )
+from ductor_bot.messenger.telegram.rich_message import rich_message_to_text
 from ductor_bot.messenger.telegram.sender import SendRichOpts, send_rich
 from ductor_bot.messenger.telegram.sender import (
     send_files_from_text as _send_files_from_text,
@@ -1450,7 +1451,12 @@ class TelegramBot:
                 return None
             return prepend_reply_to_media(message, media_prompt)
         if not message.text:
-            return None
+            # Bot API 9.x channel posts can arrive as rich_message blocks with
+            # an empty text field. Without this they are dropped silently.
+            rich_text = rich_message_to_text(message)
+            if rich_text is None:
+                return None
+            return build_reply_prompt(message, rich_text)
         text = strip_mention(message.text, self._bot_username)
         return build_reply_prompt(message, text)
 
