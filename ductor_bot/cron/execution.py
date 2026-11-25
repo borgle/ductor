@@ -13,6 +13,7 @@ from pathlib import Path
 from shutil import which
 
 from ductor_bot.cli.codex_events import parse_codex_jsonl
+from ductor_bot.cli.codex_utils import split_codex_model_id
 from ductor_bot.cli.gemini_events import parse_gemini_json
 from ductor_bot.cli.gemini_utils import find_gemini_cli
 from ductor_bot.cli.grok_events import parse_grok_json
@@ -193,7 +194,12 @@ def _build_codex_cmd(exec_config: TaskExecutionConfig, prompt: str) -> OneShotCo
     else:
         cmd.append("--full-auto")
 
-    cmd += ["--model", exec_config.model]
+    codex_model = split_codex_model_id(exec_config.model)
+    if codex_model is None:
+        cmd += ["--model", exec_config.model]
+    else:
+        provider, model = codex_model
+        cmd += ["-c", f"model_provider={provider}", "--model", model]
 
     # Add reasoning effort (if not default)
     if exec_config.reasoning_effort and exec_config.reasoning_effort != "medium":

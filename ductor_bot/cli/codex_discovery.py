@@ -8,12 +8,13 @@ import json
 import logging
 import os
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from shutil import which
 
 import aiohttp
 
+from ductor_bot.cli.codex_utils import format_codex_model_id
 from ductor_bot.infra.platform import CREATION_FLAGS as _CREATION_FLAGS
 
 logger = logging.getLogger(__name__)
@@ -65,6 +66,11 @@ async def discover_codex_models(  # noqa: C901
         logger.debug("codex CLI not found, skipping model discovery")
         return []
 
+    catalog_models = await _discover_catalog_models()
+    if catalog_models:
+        logger.info("Codex discovery found %d models from provider catalogs", len(catalog_models))
+        return catalog_models
+
     process: asyncio.subprocess.Process | None = None
     lines: list[str] = []
 
@@ -110,19 +116,19 @@ async def discover_codex_models(  # noqa: C901
             await _kill_process(process)
 
     models = _parse_response("".join(lines))
-    if not models:
-        models = await _discover_catalog_models()
-    logger.info("Codex discovery found %d models", len(models))
+    logger.info("Codex discovery found %d models via app-server", len(models))
     return models
 
 
 @dataclass(frozen=True, slots=True)
 class _CodexCatalogConfig:
-    """Active Codex provider catalog endpoint and credentials."""
+    """One Codex provider's catalog endpoint and credentials."""
 
+    provider: str
     model: str
     catalog_url: str
     token: str
+    active: bool
 
 
 def _codex_home() -> Path:
@@ -130,48 +136,80 @@ def _codex_home() -> Path:
     return Path(os.environ.get("CODEX_HOME", str(default)))
 
 
-def _load_codex_catalog_config() -> _CodexCatalogConfig | None:
-    """Read the active provider's ``model_catalog_url`` from CODEX_HOME.
+def _load_codex_catalog_configs() -> list[_CodexCatalogConfig]:
+    """Read every provider with a ``model_catalog_url`` from CODEX_HOME.
 
-    Custom Codex providers (Ollama, local gateways, proxy catalogs) are not
-    returned by the app-server ``model/list`` RPC in every Codex version. Their
-    ``config.toml`` exposes the same catalog over HTTP, so fall back to that.
+    Codex itself uses one active provider per invocation, but its config can
+    define several custom providers. ductor lists all of their catalogs and
+    rewrites the selected model back to ``-c model_provider=<provider>``.
     """
     try:
         data = tomllib.loads((_codex_home() / "config.toml").read_text(encoding="utf-8"))
     except (OSError, tomllib.TOMLDecodeError):
-        return None
+        return []
 
-    provider_id = str(data.get("model_provider") or "openai")
+    active_provider = str(data.get("model_provider") or "openai")
+    active_model = str(data.get("model") or "")
     providers = data.get("model_providers")
     if not isinstance(providers, dict):
-        return None
-    provider = providers.get(provider_id)
-    if not isinstance(provider, dict):
-        return None
+        return []
 
-    catalog_url = provider.get("model_catalog_url")
-    if not isinstance(catalog_url, str) or not catalog_url.startswith(("http://", "https://")):
-        return None
+    provider_ids = [active_provider, *(pid for pid in providers if pid != active_provider)]
+    configs: list[_CodexCatalogConfig] = []
+    for provider_id in provider_ids:
+        provider = providers.get(provider_id)
+        if not isinstance(provider, dict):
+            continue
 
-    token = provider.get("experimental_bearer_token")
-    if not isinstance(token, str) or not token:
-        env_key = provider.get("env_key")
-        token = os.environ.get(str(env_key), "") if env_key else ""
+        catalog_url = provider.get("model_catalog_url")
+        if not isinstance(catalog_url, str) or not catalog_url.startswith(("http://", "https://")):
+            continue
 
-    return _CodexCatalogConfig(
-        model=str(data.get("model") or ""),
-        catalog_url=catalog_url,
-        token=token if isinstance(token, str) else "",
-    )
+        token = provider.get("experimental_bearer_token")
+        if not isinstance(token, str) or not token:
+            env_key = provider.get("env_key")
+            token = os.environ.get(str(env_key), "") if env_key else ""
+
+        configs.append(
+            _CodexCatalogConfig(
+                provider=str(provider_id),
+                model=active_model if provider_id == active_provider else "",
+                catalog_url=catalog_url,
+                token=token if isinstance(token, str) else "",
+                active=provider_id == active_provider,
+            )
+        )
+    return configs
 
 
 async def _discover_catalog_models() -> list[CodexModelInfo]:
-    """Query the active Codex provider's HTTP model catalog when available."""
-    config = await asyncio.to_thread(_load_codex_catalog_config)
-    if config is None:
+    """Fetch all configured Codex provider catalogs."""
+    configs = await asyncio.to_thread(_load_codex_catalog_configs)
+    return await _discover_catalog_models_for(configs)
+
+
+async def _discover_catalog_models_for(
+    configs: list[_CodexCatalogConfig],
+) -> list[CodexModelInfo]:
+    if not configs:
         return []
 
+    groups = await asyncio.gather(*(_fetch_catalog(config) for config in configs))
+    models: list[CodexModelInfo] = []
+    seen: set[str] = set()
+    for group in groups:
+        for model in group:
+            if model.id in seen:
+                continue
+            seen.add(model.id)
+            models.append(model)
+
+    if models and not any(model.is_default for model in models):
+        models[0] = replace(models[0], is_default=True)
+    return models
+
+
+async def _fetch_catalog(config: _CodexCatalogConfig) -> list[CodexModelInfo]:
     # Some local proxy catalogs mishandle gzip; ask for the raw body.
     headers = {"Accept": "application/json", "Accept-Encoding": "identity"}
     if config.token:
@@ -183,17 +221,22 @@ async def _discover_catalog_models() -> list[CodexModelInfo]:
             session.get(config.catalog_url, headers=headers) as resp,
         ):
             if resp.status != 200:
-                logger.debug("Codex model catalog returned HTTP %s", resp.status)
+                logger.debug("Codex catalog for %s returned HTTP %s", config.provider, resp.status)
                 return []
             data = await resp.json()
     except (aiohttp.ClientError, TimeoutError, ValueError):
-        logger.debug("Codex model catalog fetch failed", exc_info=True)
+        logger.debug("Codex catalog fetch failed for %s", config.provider, exc_info=True)
         return []
 
-    return _parse_catalog(data, default_model=config.model)
+    return _parse_catalog(data, provider=config.provider, default_model=config.model)
 
 
-def _parse_catalog(data: object, *, default_model: str) -> list[CodexModelInfo]:
+def _parse_catalog(
+    data: object,
+    *,
+    provider: str,
+    default_model: str = "",
+) -> list[CodexModelInfo]:
     """Parse the provider catalog shape used by ``codex debug models``."""
     if not isinstance(data, dict):
         return []
@@ -222,7 +265,7 @@ def _parse_catalog(data: object, *, default_model: str) -> list[CodexModelInfo]:
         )
         models.append(
             CodexModelInfo(
-                id=model_id,
+                id=format_codex_model_id(provider, model_id),
                 display_name=str(entry.get("display_name") or entry.get("displayName") or model_id),
                 description=str(entry.get("description") or ""),
                 supported_efforts=efforts or ("medium",),
@@ -231,25 +274,10 @@ def _parse_catalog(data: object, *, default_model: str) -> list[CodexModelInfo]:
                     or entry.get("defaultReasoningEffort")
                     or "medium"
                 ),
-                is_default=False,
+                is_default=bool(default_model) and model_id == default_model,
             )
         )
 
-    if not models:
-        return []
-
-    default_index = next(
-        (i for i, model in enumerate(models) if model.id == default_model),
-        0,
-    )
-    models[default_index] = CodexModelInfo(
-        id=models[default_index].id,
-        display_name=models[default_index].display_name,
-        description=models[default_index].description,
-        supported_efforts=models[default_index].supported_efforts,
-        default_effort=models[default_index].default_effort,
-        is_default=True,
-    )
     return models
 
 

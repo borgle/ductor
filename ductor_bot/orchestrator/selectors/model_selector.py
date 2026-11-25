@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from ductor_bot.cli.auth import AuthStatus, check_all_auth
+from ductor_bot.cli.codex_utils import split_codex_model_id
 from ductor_bot.config import (
     ANTIGRAVITY_MODELS_ORDERED,
     CLAUDE_MODELS_ORDERED,
@@ -252,14 +253,20 @@ def _model_entries(  # noqa: PLR0911
         ]
     if provider == "codex":
         models = codex_cache.models if codex_cache else []
-        return [
-            _ModelEntry(
-                model_id=m.id,
-                label=m.display_name or m.id,
-                description=m.description,
+        entries: list[_ModelEntry] = []
+        for model in models:
+            label = model.display_name or model.id
+            parts = split_codex_model_id(model.id)
+            if parts is not None:
+                label = f"{parts[0]}/{label}"
+            entries.append(
+                _ModelEntry(
+                    model_id=model.id,
+                    label=label,
+                    description=model.description,
+                )
             )
-            for m in models
-        ]
+        return entries
     return []
 
 

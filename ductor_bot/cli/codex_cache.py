@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Self
 
 from ductor_bot.cli.codex_discovery import CodexModelInfo, discover_codex_models
+from ductor_bot.cli.codex_utils import CODEX_MODEL_PREFIX
 from ductor_bot.cli.model_cache import BaseModelCache
 
 # Hardcoded fallback when discovery and disk cache both fail.
@@ -69,11 +70,21 @@ class CodexModelCache(BaseModelCache):
         return list(_FALLBACK_CODEX_MODELS)
 
     def get_model(self, model_id: str) -> CodexModelInfo | None:
-        """Look up model by ID."""
+        """Look up model by full ID, with a legacy bare-slug fallback."""
         for model in self.models:
             if model.id == model_id:
                 return model
-        return None
+
+        if model_id.startswith(CODEX_MODEL_PREFIX):
+            return None
+
+        # Legacy configs store only the provider-local slug. Resolve it against
+        # the cached provider IDs; prefer the active/default provider.
+        suffix = f"/{model_id}"
+        matches = [model for model in self.models if model.id.endswith(suffix)]
+        if not matches:
+            return None
+        return next((model for model in matches if model.is_default), matches[0])
 
     def validate_model(self, model_id: str) -> bool:
         """Check if model exists in cache."""

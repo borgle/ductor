@@ -20,6 +20,7 @@ from ductor_bot.cli.codex_events import (
     parse_codex_jsonl,
     parse_codex_stream_event,
 )
+from ductor_bot.cli.codex_utils import split_codex_model_id
 from ductor_bot.cli.executor import (
     SubprocessResult,
     SubprocessSpec,
@@ -108,6 +109,17 @@ class CodexCLI(BaseCLI):
             return ["--full-auto"]
         return ["--sandbox", cfg.sandbox_mode]
 
+    def _model_flags(self) -> list[str]:
+        """Map ``codex/<provider>/<model>`` to a provider override plus model."""
+        model = self._config.model
+        if not model:
+            return []
+        parts = split_codex_model_id(model)
+        if parts is None:
+            return ["--model", model]
+        provider, model_id = parts
+        return ["-c", f"model_provider={provider}", "--model", model_id]
+
     def _build_resume_command(self, session_id: str, *, json_output: bool) -> list[str]:
         """Build command to resume an existing Codex session."""
         cfg = self._config
@@ -118,8 +130,7 @@ class CodexCLI(BaseCLI):
         # Codex stores the model and effort at session creation; re-assert
         # both so later /model and /effort changes apply on resumed turns,
         # matching Claude's per-turn --model/--effort behavior.
-        if cfg.model:
-            cmd += ["--model", cfg.model]
+        cmd += self._model_flags()
         if cfg.reasoning_effort and cfg.reasoning_effort != "default":
             cmd += ["-c", f"model_reasoning_effort={cfg.reasoning_effort}"]
         cmd += ["--", session_id]
@@ -145,8 +156,7 @@ class CodexCLI(BaseCLI):
         cmd += self._sandbox_flags()
         cmd.append("--skip-git-repo-check")
 
-        if cfg.model:
-            cmd += ["--model", cfg.model]
+        cmd += self._model_flags()
         if cfg.reasoning_effort and cfg.reasoning_effort != "default":
             cmd += ["-c", f"model_reasoning_effort={cfg.reasoning_effort}"]
         if cfg.instructions:

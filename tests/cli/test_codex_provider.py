@@ -184,6 +184,31 @@ class TestSandboxFlags:
 # ---------------------------------------------------------------------------
 
 
+class TestCodexCronCommand:
+    def test_provider_prefixed_model_sets_model_provider(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from ductor_bot.cli.param_resolver import TaskExecutionConfig
+        from ductor_bot.cron.execution import _build_codex_cmd
+
+        monkeypatch.setattr("ductor_bot.cron.execution.which", lambda _: "/usr/bin/codex")
+        config = TaskExecutionConfig(
+            provider="codex",
+            model="codex/opencode/deepseek-v4.1-flash",
+            reasoning_effort="medium",
+            permission_mode="bypassPermissions",
+            cli_parameters=[],
+            working_dir="/tmp",
+            file_access="all",
+        )
+        one = _build_codex_cmd(config, "hello")
+        assert one is not None
+        idx = one.cmd.index("-c")
+        assert one.cmd[idx + 1] == "model_provider=opencode"
+        idx_model = one.cmd.index("--model")
+        assert one.cmd[idx_model + 1] == "deepseek-v4.1-flash"
+
+
 class TestBuildCommand:
     def test_basic_exec_structure(self, monkeypatch: pytest.MonkeyPatch) -> None:
         cli = _make_cli(monkeypatch, model="gpt-5.2-codex")
@@ -200,6 +225,26 @@ class TestBuildCommand:
         assert cmd[idx_model + 1] == "gpt-5.2-codex"
         assert cmd[-2:] == ["--", "-"]
         assert "hello" not in cmd
+
+    def test_provider_prefixed_model_sets_model_provider(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        cli = _make_cli(monkeypatch, model="codex/opencode/deepseek-v4.1-flash")
+        cmd = cli._build_command("hello")
+        idx = cmd.index("-c")
+        assert cmd[idx + 1] == "model_provider=opencode"
+        idx_model = cmd.index("--model")
+        assert cmd[idx_model + 1] == "deepseek-v4.1-flash"
+
+    def test_provider_prefixed_resume_sets_model_provider(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        cli = _make_cli(monkeypatch, model="codex/deepseek/deepseek-flash")
+        cmd = cli._build_command("hello", resume_session="thread-abc")
+        idx = cmd.index("-c")
+        assert cmd[idx + 1] == "model_provider=deepseek"
+        idx_model = cmd.index("--model")
+        assert cmd[idx_model + 1] == "deepseek-flash"
 
     def test_json_output_false(self, monkeypatch: pytest.MonkeyPatch) -> None:
         cli = _make_cli(monkeypatch)

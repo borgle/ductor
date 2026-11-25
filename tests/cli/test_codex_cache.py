@@ -204,6 +204,33 @@ def test_validate_model_missing(fresh_cache: CodexModelCache) -> None:
     assert fresh_cache.validate_model("nonexistent") is False
 
 
+def test_get_model_resolves_legacy_bare_slug() -> None:
+    cache = CodexModelCache(
+        last_updated=datetime.now(UTC).isoformat(),
+        models=[
+            CodexModelInfo(
+                id="codex/opencode/deepseek-v4.1-flash",
+                display_name="DeepSeek V4.1 Flash",
+                description="",
+                supported_efforts=("low", "high"),
+                default_effort="high",
+                is_default=False,
+            ),
+            CodexModelInfo(
+                id="codex/deepseek/deepseek-flash",
+                display_name="DeepSeek-V4.1-Flash",
+                description="",
+                supported_efforts=("low", "high"),
+                default_effort="high",
+                is_default=True,
+            ),
+        ],
+    )
+    assert cache.validate_model("codex/opencode/deepseek-v4.1-flash") is True
+    # Legacy bare config slug resolves to the active/default provider's model.
+    assert cache.get_model("deepseek-flash").id == "codex/deepseek/deepseek-flash"
+
+
 def test_validate_reasoning_effort(fresh_cache: CodexModelCache) -> None:
     """Should validate reasoning effort against model capabilities."""
     assert fresh_cache.validate_reasoning_effort("gpt-4o", "low") is True

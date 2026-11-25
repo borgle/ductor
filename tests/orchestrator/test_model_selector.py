@@ -259,6 +259,36 @@ async def test_callback_provider_codex(orch: Orchestrator) -> None:
     assert "gpt-5.2-codex" in labels
 
 
+async def test_codex_browser_labels_underlying_provider(orch: Orchestrator) -> None:
+    models = [
+        CodexModelInfo(
+            id="codex/opencode/deepseek-v4.1-flash",
+            display_name="DeepSeek V4.1 Flash",
+            description="",
+            supported_efforts=("low", "high"),
+            default_effort="high",
+            is_default=True,
+        ),
+        CodexModelInfo(
+            id="codex/deepseek/deepseek-flash",
+            display_name="DeepSeek-V4.1-Flash",
+            description="",
+            supported_efforts=("low", "high"),
+            default_effort="high",
+            is_default=False,
+        ),
+    ]
+    with _with_codex_cache(orch, models=models):
+        resp = await handle_model_callback(orch, SessionKey(chat_id=1), "ms:p:codex")
+
+    assert resp.buttons is not None
+    labels = [btn.text for row in resp.buttons.rows for btn in row]
+    callbacks = [btn.callback_data for row in resp.buttons.rows for btn in row]
+    assert "opencode/DeepSeek V4.1 Flash" in labels
+    assert "deepseek/DeepSeek-V4.1-Flash" in labels
+    assert "ms:m:codex/opencode/deepseek-v4.1-flash" in callbacks
+
+
 async def test_callback_provider_codex_fallback(orch: Orchestrator) -> None:
     with _with_codex_cache(orch, models=[]):
         resp = await handle_model_callback(orch, SessionKey(chat_id=1), "ms:p:codex")

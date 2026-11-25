@@ -13,6 +13,7 @@ from ductor_bot.cli import codex_discovery
 from ductor_bot.cli.codex_discovery import (
     CodexModelInfo,
     _CodexCatalogConfig,
+    _load_codex_catalog_configs,
     _parse_catalog,
     discover_codex_models,
 )
@@ -181,15 +182,18 @@ def test_parse_catalog_shapes() -> None:
             },
         ]
     }
-    models = _parse_catalog(data, default_model="deepseek-flash")
-    assert [model.id for model in models] == ["deepseek-flash", "deepseek-v4-pro"]
+    models = _parse_catalog(data, provider="deepseek", default_model="deepseek-flash")
+    assert [model.id for model in models] == [
+        "codex/deepseek/deepseek-flash",
+        "codex/deepseek/deepseek-v4-pro",
+    ]
     assert models[0].is_default is True
     assert models[0].supported_efforts == ("low", "high")
     assert models[0].default_effort == "high"
     assert models[1].is_default is False
 
 
-def test_load_catalog_config_reads_active_provider(
+def test_load_catalog_configs_reads_all_providers(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     codex_home = tmp_path / "codex"
@@ -201,15 +205,29 @@ model_provider = "deepseek"
 [model_providers.deepseek]
 model_catalog_url = "http://127.0.0.1:8787/deepseek/v1/models"
 experimental_bearer_token = "secret-token"
+
+[model_providers.opencode]
+model_catalog_url = "http://127.0.0.1:8787/opencode/v1/models"
 """
     )
     monkeypatch.setenv("CODEX_HOME", str(codex_home))
-    config = codex_discovery._load_codex_catalog_config()
-    assert config == _CodexCatalogConfig(
-        model="deepseek-flash",
-        catalog_url="http://127.0.0.1:8787/deepseek/v1/models",
-        token="secret-token",
-    )
+    configs = _load_codex_catalog_configs()
+    assert configs == [
+        _CodexCatalogConfig(
+            provider="deepseek",
+            model="deepseek-flash",
+            catalog_url="http://127.0.0.1:8787/deepseek/v1/models",
+            token="secret-token",
+            active=True,
+        ),
+        _CodexCatalogConfig(
+            provider="opencode",
+            model="",
+            catalog_url="http://127.0.0.1:8787/opencode/v1/models",
+            token="",
+            active=False,
+        ),
+    ]
 
 
 async def test_discover_models_falls_back_to_catalog() -> None:

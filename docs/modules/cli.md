@@ -232,7 +232,9 @@ Each provider's cache observer is created only when the startup auth detection r
 
 - file: `~/.ductor/config/codex_models.json`
 - discovery source: `discover_codex_models()` (`codex_discovery.py`) via `codex app-server` (`initialize` + `model/list`)
-- fallback for custom Codex providers: the active `~/.codex/config.toml` provider's `model_catalog_url`, fetched with its bearer/env token when the app-server returns no models
+- custom providers: every `~/.codex/config.toml` `model_providers.*` entry with a `model_catalog_url` is fetched with its bearer/env token; IDs are stored as `codex/<provider>/<model>` so multiple providers can coexist
+- model selection maps back to `-c model_provider=<provider> --model <model>` for chat, resume, and cron/webhook one-shot runs
+- if catalog discovery yields nothing, the app-server path is still attempted
 - loaded on startup with force refresh
 - hourly refresh loop
 
