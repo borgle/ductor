@@ -68,6 +68,7 @@ from ductor_bot.messenger.telegram.middleware import (
     AuthMiddleware,
     SequentialMiddleware,
 )
+from ductor_bot.messenger.telegram.poll_message import poll_to_text
 from ductor_bot.messenger.telegram.rich_message import rich_message_to_text
 from ductor_bot.messenger.telegram.sender import SendRichOpts, send_rich
 from ductor_bot.messenger.telegram.sender import (
@@ -1432,7 +1433,7 @@ class TelegramBot:
         except Exception:
             logger.debug("Failed to set seen reaction", exc_info=True)
 
-    async def _resolve_text(self, message: Message) -> str | None:
+    async def _resolve_text(self, message: Message) -> str | None:  # noqa: PLR0911
         """Extract processable text from *message* (plain text or media prompt)."""
         if should_drop_in_group(
             message,
@@ -1451,6 +1452,10 @@ class TelegramBot:
                 return None
             return prepend_reply_to_media(message, media_prompt)
         if not message.text:
+            # Forwarded quizzes/polls carry no Message.text.
+            poll_text = poll_to_text(message)
+            if poll_text is not None:
+                return build_reply_prompt(message, poll_text)
             # Bot API 9.x channel posts can arrive as rich_message blocks with
             # an empty text field. Without this they are dropped silently.
             rich_text = rich_message_to_text(message)
